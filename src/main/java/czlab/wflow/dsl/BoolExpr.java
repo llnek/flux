@@ -13,49 +13,15 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
-
-/**
- * A nothing, nada task.
- *
- * @author kenl
- *
- */
-public class Nihil  extends Activity {
-
-  public static Nihil apply() {
-    return new Nihil();
-  }
-
-  public Nihil() {}
-
-  public FlowDot reifyDot(FlowDot cur) {
-    return new NihilDot(cur.job());
-  }
-
-  public FlowDot reify(Job j) throws Exception {
-    return new NihilDot(j);
-  }
-
-  public void realize(FlowDot p) {}
-
-}
+package czlab.wflow.dsl;
 
 
 /**
- *
  * @author kenl
- *
  */
-class NihilDot extends FlowDot {
-
-  public FlowDot eval(Job j) { return this; }
-  public FlowDot next() { return this; }
-
-  public NihilDot(Job j) {
-    super(j);
-  }
-
+@FunctionalInterface
+public interface BoolExpr {
+  public boolean ptest(Job j);
 }
 
 

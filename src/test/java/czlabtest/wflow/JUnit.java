@@ -28,7 +28,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import czlab.wflow.server.*;
-import czlab.wflow.*;
+import czlab.wflow.dsl.*;
 
 //////////////////////////////////////////////////////////////////////////////
 //

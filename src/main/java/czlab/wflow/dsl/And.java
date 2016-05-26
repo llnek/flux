@@ -13,7 +13,7 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
+package czlab.wflow.dsl;
 
 /**
  * A "AND" enforces that all bound activities must return before it continues.

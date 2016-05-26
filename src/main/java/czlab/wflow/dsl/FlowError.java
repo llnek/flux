@@ -13,35 +13,36 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
-
-import czlab.wflow.server.ServerLike;
-import czlab.wflow.server.Event;
-import czlab.xlib.Debuggable;
-import czlab.xlib.Gettable;
-import czlab.xlib.Identifiable;
-import czlab.xlib.Settable;
+package czlab.wflow.dsl;
 
 /**
  * @author kenl
  */
-public interface Job extends Gettable , Settable, Identifiable, Debuggable {
+public class FlowError extends Exception {
 
-  public void setLastResult( Object v) ;
+  private static final long serialVersionUID = 1L;
+  private FlowDot _node;
 
-  public void clrLastResult() ;
+  public FlowError(FlowDot n, String msg, Throwable e) {
+    super(msg,e);
+    _node=n;
+  }
 
-  public Object getLastResult() ;
+  public FlowError(String msg,Throwable e) {
+    this(null, msg,e);
+  }
 
-  public ServerLike container();
+  public FlowError(Throwable e) {
+    this(null,"", e);
+  }
 
-  public void clear();
+  public FlowError(String msg) {
+    this(null, msg,null);
+  }
 
-  public Event event() ;
+  public FlowDot getLastDot() { return _node; }
 
-  public WorkFlow wflow();
 }
-
 
 
 

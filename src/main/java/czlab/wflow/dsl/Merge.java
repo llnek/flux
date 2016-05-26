@@ -13,7 +13,7 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
+package czlab.wflow.dsl;
 
 import java.util.concurrent.atomic.AtomicInteger;
 

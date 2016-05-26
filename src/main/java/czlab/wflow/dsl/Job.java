@@ -13,16 +13,35 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
+package czlab.wflow.dsl;
 
-import czlab.xlib.CallableWithArgs;
+import czlab.wflow.server.ServerLike;
+import czlab.wflow.server.Event;
+import czlab.xlib.Debuggable;
+import czlab.xlib.Gettable;
+import czlab.xlib.Identifiable;
+import czlab.xlib.Settable;
 
 /**
- *
  * @author kenl
- *
  */
-public interface WHandler extends CallableWithArgs {
+public interface Job extends Gettable , Settable, Identifiable, Debuggable {
+
+  public void setLastResult( Object v) ;
+
+  public void clrLastResult() ;
+
+  public Object getLastResult() ;
+
+  public ServerLike container();
+
+  public void clear();
+
+  public Event event() ;
+
+  public WorkFlow wflow();
 }
+
+
 
 

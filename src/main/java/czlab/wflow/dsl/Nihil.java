@@ -13,36 +13,49 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
+package czlab.wflow.dsl;
 
 /**
+ * A nothing, nada task.
+ *
  * @author kenl
+ *
  */
-public class FlowError extends Exception {
+public class Nihil  extends Activity {
 
-  private static final long serialVersionUID = 1L;
-  private FlowDot _node;
-
-  public FlowError(FlowDot n, String msg, Throwable e) {
-    super(msg,e);
-    _node=n;
+  public static Nihil apply() {
+    return new Nihil();
   }
 
-  public FlowError(String msg,Throwable e) {
-    this(null, msg,e);
+  public Nihil() {}
+
+  public FlowDot reifyDot(FlowDot cur) {
+    return new NihilDot(cur.job());
   }
 
-  public FlowError(Throwable e) {
-    this(null,"", e);
+  public FlowDot reify(Job j) throws Exception {
+    return new NihilDot(j);
   }
 
-  public FlowError(String msg) {
-    this(null, msg,null);
-  }
-
-  public FlowDot getLastDot() { return _node; }
+  public void realize(FlowDot p) {}
 
 }
 
+
+/**
+ *
+ * @author kenl
+ *
+ */
+class NihilDot extends FlowDot {
+
+  public FlowDot eval(Job j) { return this; }
+  public FlowDot next() { return this; }
+
+  public NihilDot(Job j) {
+    super(j);
+  }
+
+}
 
 

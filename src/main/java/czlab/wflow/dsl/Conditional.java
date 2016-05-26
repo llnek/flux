@@ -13,15 +13,51 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
-
+package czlab.wflow.dsl;
 
 /**
  * @author kenl
+ *
  */
-@FunctionalInterface
-public interface CounterExpr {
-  public int gcount(Job job);
+abstract class Conditional extends Activity {
+
+  protected Conditional(String name, BoolExpr expr) {
+    super(name);
+    _expr= expr;
+  }
+
+  protected Conditional(BoolExpr expr) {
+    this("", expr);
+  }
+
+  public BoolExpr expr() { return _expr; }
+
+  private BoolExpr _expr;
+}
+
+
+
+/**
+ *
+ * @author kenl
+ *
+ */
+abstract class ConditionalDot extends FlowDot {
+
+  protected ConditionalDot(FlowDot c, Conditional a) {
+    super(c,a);
+  }
+
+  public FlowDot withTest(BoolExpr expr) {
+    _expr=expr;
+    return this;
+  }
+
+  protected boolean test(Job j) {
+    return _expr.ptest(j);
+  }
+
+  private BoolExpr _expr;
 }
 
 

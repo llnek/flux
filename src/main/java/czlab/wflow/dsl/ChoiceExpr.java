@@ -13,16 +13,17 @@
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
 
-package czlab.wflow;
+package czlab.wflow.dsl;
+
 
 /**
- *
  * @author kenl
- *
  */
-public interface WorkFlowEx extends WorkFlow {
-  public Activity onError(Throwable e);
-}
+@FunctionalInterface
+public interface ChoiceExpr {
 
+  public Object choice(Job j);
+
+}
 
 
