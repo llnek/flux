@@ -18,7 +18,7 @@ package czlab.wflow.dsl;
 /**
  * A "AND" enforces that all bound activities must return before it continues.
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class And extends Merge {
@@ -48,7 +48,7 @@ public class And extends Merge {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class AndDot extends MergeDot {

@@ -17,7 +17,7 @@ package czlab.wflow.dsl;
 
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class Split extends Composite {
@@ -119,7 +119,7 @@ public class Split extends Composite {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class SplitDot extends CompositeDot {

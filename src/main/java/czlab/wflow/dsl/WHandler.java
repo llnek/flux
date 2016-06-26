@@ -19,7 +19,7 @@ import czlab.xlib.CallableWithArgs;
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public interface WHandler extends CallableWithArgs {

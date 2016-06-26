@@ -18,7 +18,7 @@ package czlab.wflow.dsl;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public abstract class Merge  extends Activity {
@@ -45,7 +45,7 @@ public abstract class Merge  extends Activity {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 abstract class MergeDot extends FlowDot {
@@ -78,7 +78,7 @@ abstract class MergeDot extends FlowDot {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class NullJoin extends Merge {

@@ -19,10 +19,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
-public class NulEmitter implements Emitter {
+public class NulEmitter implements EmitterSource {
 
   private static final Map<String,?> _cfg = new HashMap<>();
   private ServerLike _server;

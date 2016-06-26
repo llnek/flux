@@ -16,13 +16,15 @@
 package czlab.wflow.server;
 
 
-/**
- * @author kenl
- */
-public interface Event {
+import czlab.xlib.Identifiable;
 
-  public Emitter emitter();
-  public Object getId();
+
+/**
+ * @author Kenneth Leung
+ */
+public interface Event extends Identifiable {
+
+  public EmitterSource emitter();
 
 }
 

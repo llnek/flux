@@ -18,7 +18,7 @@ package czlab.wflow.dsl;
 /**
  * A nothing, nada task.
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class Nihil  extends Activity {
@@ -44,7 +44,7 @@ public class Nihil  extends Activity {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class NihilDot extends FlowDot {

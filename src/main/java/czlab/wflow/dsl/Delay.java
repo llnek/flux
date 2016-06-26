@@ -16,7 +16,7 @@
 package czlab.wflow.dsl;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class Delay extends Activity {
@@ -65,7 +65,7 @@ public class Delay extends Activity {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class DelayDot extends FlowDot {

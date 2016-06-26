@@ -34,7 +34,7 @@ import czlab.wflow.dsl.*;
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class FlowServer implements ServerLike, ServiceHandler {

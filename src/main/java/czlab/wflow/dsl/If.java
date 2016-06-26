@@ -16,7 +16,7 @@
 package czlab.wflow.dsl;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class If extends Conditional {
@@ -63,7 +63,7 @@ public class If extends Conditional {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class IfDot extends ConditionalDot {

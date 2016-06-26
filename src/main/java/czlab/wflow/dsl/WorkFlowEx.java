@@ -17,7 +17,7 @@ package czlab.wflow.dsl;
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public interface WorkFlowEx extends WorkFlow {

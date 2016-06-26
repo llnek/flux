@@ -17,7 +17,7 @@ package czlab.wflow.server;
 
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  */
 public class NonEvent implements Event {
 
@@ -25,21 +25,21 @@ public class NonEvent implements Event {
     _emit=em;
   }
 
-  private Emitter _emit;
-
   public NonEvent(ServerLike s) {
     this(new NulEmitter(s));
   }
 
   @Override
-  public Object getId() {
+  public Object id() {
     return "nada";
   }
 
   @Override
-  public Emitter emitter() {
+  public EmitterSource emitter() {
     return _emit;
   }
+
+  private EmitterSource _emit;
 
 }
 

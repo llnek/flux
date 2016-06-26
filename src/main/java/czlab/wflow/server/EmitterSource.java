@@ -15,11 +15,16 @@
 
 package czlab.wflow.server;
 
+
+import czlab.xlib.Suspendable;
+
+
+
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
-public interface Emitter {
+public interface EmitterSource extends Suspendable {
 
   public void dispatch(Event evt, Object options);
 
@@ -28,9 +33,6 @@ public interface Emitter {
 
   public boolean isEnabled();
   public boolean isActive();
-
-  public void suspend();
-  public void resume();
 
   public EventHolder release(Object obj);
   public void hold(EventHolder obj);

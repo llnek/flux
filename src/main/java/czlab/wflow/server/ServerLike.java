@@ -18,7 +18,7 @@ package czlab.wflow.server;
 import czlab.xlib.Schedulable;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  */
 @FunctionalInterface
 public interface ServerLike {

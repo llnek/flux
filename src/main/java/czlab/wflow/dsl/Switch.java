@@ -19,7 +19,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class Switch extends Activity {
@@ -84,7 +84,7 @@ public class Switch extends Activity {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class SwitchDot extends FlowDot {

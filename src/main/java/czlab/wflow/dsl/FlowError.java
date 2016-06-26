@@ -16,7 +16,7 @@
 package czlab.wflow.dsl;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  */
 public class FlowError extends Exception {
 

@@ -23,7 +23,7 @@ import czlab.xlib.Identifiable;
 import czlab.xlib.Settable;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  */
 public interface Job extends Gettable , Settable, Identifiable, Debuggable {
 

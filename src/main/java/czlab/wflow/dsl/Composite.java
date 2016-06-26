@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 abstract class Composite extends Activity {
@@ -52,7 +52,7 @@ abstract class Composite extends Activity {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 abstract class CompositeDot extends FlowDot {
@@ -79,7 +79,7 @@ abstract class CompositeDot extends FlowDot {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class Innards {

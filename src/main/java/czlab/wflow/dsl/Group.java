@@ -18,7 +18,7 @@ package czlab.wflow.dsl;
 /**
  * A logical group - sequence of connected activities.
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class Group extends Composite {
@@ -65,7 +65,7 @@ class Group extends Composite {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class GroupDot extends CompositeDot {

@@ -16,7 +16,7 @@
 package czlab.wflow.dsl;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class PTask extends Activity {
@@ -64,7 +64,7 @@ public class PTask extends Activity {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class PTaskDot extends FlowDot {

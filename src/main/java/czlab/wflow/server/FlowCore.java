@@ -28,7 +28,7 @@ import java.util.TimerTask;
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 @SuppressWarnings({ "rawtypes", "unchecked"})

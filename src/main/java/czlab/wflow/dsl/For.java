@@ -19,7 +19,7 @@ package czlab.wflow.dsl;
 /**
  * A For is treated sort of like a while with the test-condition being (i &lt; upperlimit).
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class For extends While {
@@ -50,7 +50,7 @@ public class For extends While {
 }
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 @SuppressWarnings("unused")
@@ -83,7 +83,7 @@ class LoopExpr implements BoolExpr {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class ForDot extends WhileDot {

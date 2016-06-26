@@ -26,7 +26,7 @@ import czlab.xlib.Named;
  * At runtime, it has to be reified.  This process
  * turns an Activity into a Step in the Workflow.
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public abstract class Activity implements Named {

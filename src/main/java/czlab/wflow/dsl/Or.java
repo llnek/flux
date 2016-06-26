@@ -16,7 +16,7 @@
 package czlab.wflow.dsl;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class Or extends Merge {
@@ -46,7 +46,7 @@ public class Or extends Merge {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class OrDot extends MergeDot {

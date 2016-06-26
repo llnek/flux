@@ -26,7 +26,7 @@ import czlab.xlib.RunnableWithId;
 import czlab.xlib.Schedulable;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 @SuppressWarnings("unused")

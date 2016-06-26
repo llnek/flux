@@ -16,7 +16,7 @@
 package czlab.wflow.dsl;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 abstract class Conditional extends Activity {
@@ -39,7 +39,7 @@ abstract class Conditional extends Activity {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 abstract class ConditionalDot extends FlowDot {

@@ -18,12 +18,14 @@ package czlab.wflow.server;
 import czlab.xlib.Identifiable;
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  */
 public interface EventHolder extends Identifiable {
 
-  public void timeoutMillis(long  millis);
+  public void timeoutMillis(long millis);
+
   public void resumeOnResult(Object res);
+
   public void onExpiry();
 
 }

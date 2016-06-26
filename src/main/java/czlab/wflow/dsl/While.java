@@ -17,7 +17,7 @@ package czlab.wflow.dsl;
 
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 @SuppressWarnings("unused")
@@ -58,7 +58,7 @@ public class While extends Conditional {
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 class WhileDot extends ConditionalDot {

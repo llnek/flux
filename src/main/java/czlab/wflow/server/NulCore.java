@@ -19,7 +19,7 @@ import czlab.xlib.Schedulable;
 
 /**
  *
- * @author kenl
+ * @author Kenneth Leung
  *
  */
 public class NulCore implements Schedulable {

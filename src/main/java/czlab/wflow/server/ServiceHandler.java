@@ -17,7 +17,7 @@ package czlab.wflow.server;
 
 
 /**
- * @author kenl
+ * @author Kenneth Leung
  */
 public interface ServiceHandler {
 
