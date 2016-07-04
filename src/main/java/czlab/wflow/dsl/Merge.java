@@ -29,7 +29,7 @@ public abstract class Merge  extends Activity {
   }
 
   protected Merge(Activity b) {
-    this("",b);
+    this("", b);
   }
 
   protected Merge withBranches(int n) {
@@ -48,22 +48,22 @@ public abstract class Merge  extends Activity {
  * @author Kenneth Leung
  *
  */
-abstract class MergeDot extends FlowDot {
+abstract class MergeStep extends Step {
 
   protected AtomicInteger _cntr=new AtomicInteger(0);
-  protected FlowDot _body = null;
+  protected Step _body = null;
   private int _branches= 0;
 
-  protected MergeDot(FlowDot c, Merge a) {
+  protected MergeStep(Step c, Merge a) {
     super(c,a);
   }
 
-  public MergeDot withBody(FlowDot body) {
+  public MergeStep withBody(Step body) {
     _body=body;
     return this;
   }
 
-  public MergeDot withBranches(int n) {
+  public MergeStep withBranches(int n) {
     _branches=n;
     return this;
   }
@@ -83,18 +83,20 @@ abstract class MergeDot extends FlowDot {
  */
 class NullJoin extends Merge {
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new MergeDot(cur, this){
-      public FlowDot eval(Job j) {
+  public Step realize(Step me) { return me;  }
+
+  public Step createStep(Step cur) {
+    return new MergeStep(cur, this){
+      public Step handle(Job j) {
         return null;
       }
     };
   }
-
-  public void realize(FlowDot cur) {}
 
   public NullJoin() {
     super(null);
   }
 
 }
+
+

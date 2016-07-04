@@ -69,12 +69,12 @@ public class Split extends Composite {
     _theMerge = j;
   }
 
-  public Split(Merge j) {
-    this("", j);
-  }
-
   public Split (String name) {
     this(name,null);
+  }
+
+  public Split(Merge j) {
+    this("", j);
   }
 
   public Split () {
@@ -93,24 +93,25 @@ public class Split extends Composite {
     return this;
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new SplitDot(cur, this);
+  public Step createStep(Step cur) {
+    return new SplitStep(cur, this);
   }
 
-  public  void realize(FlowDot n) {
-    SplitDot p= (SplitDot) n;
+  public  Step realize(Step me) {
+    SplitStep p= (SplitStep) me;
     Merge m= _theMerge;
 
     if ( m == null) {      m = new NullJoin();    }
     m.withBranches( size() );
 
-    FlowDot s = m.reify(p.next() );
+    Step s = m.reify(p.next() );
     p.withBranches( new Innards(s, listChildren() ) );
 
     if (m instanceof NullJoin) {
         p.fallThrough();
     }
 
+    return me;
   }
 
 
@@ -122,16 +123,16 @@ public class Split extends Composite {
  * @author Kenneth Leung
  *
  */
-class SplitDot extends CompositeDot {
+class SplitStep extends CompositeStep {
 
-  public SplitDot(FlowDot c, Split a) {
+  public SplitStep(Step c, Split a) {
     super(c,a);
   }
 
   private boolean _fallThru=false;
 
-  public FlowDot eval(Job j) {
-    FlowDot rc= null;
+  public Step handle(Job j) {
+    Step rc= null;
 
     while ( !inner().isEmpty() ) {
       rc = inner().next();
@@ -147,12 +148,12 @@ class SplitDot extends CompositeDot {
     return _fallThru ? next() : null;
   }
 
-  public SplitDot withBranches(Innards w) {
+  public SplitStep withBranches(Innards w) {
     setInner(w);
     return this;
   }
 
-  public SplitDot fallThrough() {
+  public SplitStep fallThrough() {
     _fallThru=true;
     return this;
   }

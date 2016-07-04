@@ -51,9 +51,8 @@ public abstract class Activity implements Named {
    * @param a the unit of work to follow after this one.
    * @return an *ordered* list of work units.
    */
-  public Activity chain( Activity a) {
-    return
-    new Group(this).chain(a);
+  public Activity chain(Activity a) {
+    return a== this ? this : new Group(this).chain(a);
   }
 
   /**
@@ -63,27 +62,25 @@ public abstract class Activity implements Named {
    * @param cur current step.
    * @return a *runtime* version of this Activity.
    */
-  public FlowDot reify(FlowDot cur) {
-    FlowDot n= reifyDot(cur);
-    n.realize();
-    return n;
+  public Step reify(Step cur) {
+    return realize(createStep(cur));
   }
 
-  public FlowDot reify(Job j) throws Exception {
+  public Step reify(Job j) throws Exception {
     throw new IllegalAccessException("Should not be called");
   }
 
   public String toString() {
-    return "Activity##(" + getClass().getName() + ")";
+    return "Activity##(" + getClass().getSimpleName() + ")";
   }
 
   public void XXXfinalize() throws Throwable {
     super.finalize();
-    TLOG.debug("Activity: " + getClass().getName() + " finz'ed");
+    TLOG.debug(toString() + " finz'ed");
   }
 
-  protected abstract FlowDot reifyDot(FlowDot cur) ;
-  protected abstract void realize(FlowDot p);
+  protected abstract Step createStep(Step cur) ;
+  protected abstract Step realize(Step me);
 
 }
 

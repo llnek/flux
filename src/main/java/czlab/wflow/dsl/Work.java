@@ -20,9 +20,8 @@ package czlab.wflow.dsl;
  * @author Kenneth Leung
  *
  */
-@FunctionalInterface
-public interface Work {
-  public Object on(FlowDot cur, Job j);
+@FunctionalInterface public interface Work {
+  public Object eval(Step cur, Job j);
 }
 
 

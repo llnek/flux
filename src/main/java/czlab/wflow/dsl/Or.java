@@ -29,16 +29,17 @@ public class Or extends Merge {
     this("",b);
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new OrDot(cur, this);
+  public Step createStep(Step cur) {
+    return new OrStep(cur, this);
   }
 
-  public void realize(FlowDot n) {
-    OrDot s= (OrDot) n;
+  public Step realize(Step me) {
+    OrStep s= (OrStep) me;
     if (_body != null) {
-      s.withBody( _body.reify(s.next() ));
+      s.withBody(_body.reify(s.next() ));
     }
     s.withBranches(_branches);
+    return me;
   }
 
 }
@@ -49,16 +50,16 @@ public class Or extends Merge {
  * @author Kenneth Leung
  *
  */
-class OrDot extends MergeDot {
+class OrStep extends MergeStep {
 
-  public OrDot(FlowDot c, Or a) {
+  public OrStep(Step c, Or a) {
     super(c,a);
   }
 
-  public FlowDot eval(Job j) {
+  public Step handle(Job j) {
     int nv= _cntr.incrementAndGet();
-    FlowDot rc= this;
-    FlowDot nx= next();
+    Step rc= this;
+    Step nx= next();
 
     if (size() == 0) {
       // 'or' of nothing, nothing to do
@@ -85,7 +86,7 @@ class OrDot extends MergeDot {
   }
 
   private void done() {
-    TLOG.debug("OrDot: all branches have returned.");
+    TLOG.debug("OrStep: all branches have returned.");
     realize();
   }
 

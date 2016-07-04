@@ -28,20 +28,21 @@ public class And extends Merge {
   }
 
   public And(Activity body) {
-    this("",body);
+    this("", body);
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new AndDot(cur, this);
+  public Step createStep(Step cur) {
+    return new AndStep(cur, this);
   }
 
-  public void realize(FlowDot n) {
-    AndDot s = (AndDot)n;
-    FlowDot x=s.next();
+  public Step realize(Step me) {
+    AndStep s= (AndStep)me;
+    Step x= s.next();
     s.withBranches(_branches);
     if (_body != null) {
-      s.withBody( _body.reify( x));
+      s.withBody(_body.reify(x));
     }
+    return me;
   }
 
 }
@@ -51,29 +52,31 @@ public class And extends Merge {
  * @author Kenneth Leung
  *
  */
-class AndDot extends MergeDot {
+class AndStep extends MergeStep {
 
-  public AndDot(FlowDot c, And a) {
-    super(c,a);
+  public AndStep(Step c, And a) {
+    super(c, a);
   }
 
-  public FlowDot eval(Job j) {
+  public Step handle(Job j) {
     int nv= _cntr.incrementAndGet();
-    FlowDot rc= null;
+    Step rc= null;
 
-    TLOG.debug("AndDot: size={}, cntr={}, join={}",
-        size(),  nv, getDef().getName());
+    TLOG.debug("AndStep: size={}, cntr={}, join={}",
+               size(),
+               nv,
+               getDef().getName());
 
-    // all branches have returned, proceed...
     if (nv == size() ) {
       rc= (_body == null) ? next() : _body;
       done();
     }
+
     return rc;
   }
 
   private void done() {
-    TLOG.debug("AndDot: all branches have returned");
+    TLOG.debug("AndStep: all branches have returned");
     realize();
   }
 

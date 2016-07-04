@@ -21,12 +21,22 @@ package czlab.wflow.server;
  */
 public class NonEvent implements Event {
 
-  public NonEvent(NulEmitter em) {
-    _emit=em;
+  public NonEvent() {
+    _emit=new EventEmitter(){
+          public void dispatch(Event evt, Object options) {}
+          public ServerLike container() {return null;}
+          public Object getConfig() {return null;}
+          public boolean isEnabled() {return true;}
+          public boolean isActive() {return true;}
+          public void suspend() {}
+          public void resume() {}
+          public EventHolder release(Object obj) {return null;}
+          public void hold(EventHolder obj) {}
+    };
   }
 
   public NonEvent(ServerLike s) {
-    this(new NulEmitter(s));
+    this();
   }
 
   @Override
@@ -35,11 +45,11 @@ public class NonEvent implements Event {
   }
 
   @Override
-  public EmitterSource emitter() {
+  public EventEmitter emitter() {
     return _emit;
   }
 
-  private EmitterSource _emit;
+  private EventEmitter _emit;
 
 }
 

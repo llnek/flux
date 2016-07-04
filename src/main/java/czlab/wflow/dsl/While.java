@@ -40,15 +40,16 @@ public class While extends Conditional {
     this("", expr, b);
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new WhileDot(cur, this);
+  public Step createStep(Step cur) {
+    return new WhileStep(cur, this);
   }
 
-  public void realize(FlowDot n) {
-    WhileDot p= (WhileDot) n;
+  public Step realize(Step me) {
+    WhileStep p= (WhileStep) me;
     assert(_body != null);
     p.withBody(_body.reify(p));
     p.withTest( expr() );
+    return me;
   }
 
   private Activity _body;
@@ -61,14 +62,14 @@ public class While extends Conditional {
  * @author Kenneth Leung
  *
  */
-class WhileDot extends ConditionalDot {
+class WhileStep extends ConditionalStep {
 
-  public WhileDot(FlowDot c, While a) {
+  public WhileStep(Step c, While a) {
     super(c,a);
   }
 
-  public FlowDot eval(Job j) {
-    FlowDot n, rc = this;
+  public Step handle(Job j) {
+    Step n, rc = this;
 
     if ( ! test(j)) {
       //TLOG.debug("WhileDot: test-condition == false")
@@ -78,11 +79,11 @@ class WhileDot extends ConditionalDot {
       //TLOG.debug("WhileDot: looping - eval body")
       //normally n is null, but if it is not
       //switch the body to it.
-      n= _body.eval(j);
+      n= _body.handle(j);
       if (n != null) {
 
-        if (n instanceof DelayDot) {
-          ((DelayDot) n).setNext(rc);
+        if (n instanceof DelayStep) {
+          ((DelayStep) n).setNext(rc);
           rc=n;
         }
         else
@@ -98,12 +99,12 @@ class WhileDot extends ConditionalDot {
     return rc;
   }
 
-  public WhileDot withBody(FlowDot b) {
+  public WhileStep withBody(Step b) {
     _body=b;
     return this;
   }
 
-  private FlowDot _body = null;
+  private Step _body = null;
 }
 
 

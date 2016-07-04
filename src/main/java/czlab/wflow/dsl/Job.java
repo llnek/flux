@@ -27,7 +27,7 @@ import czlab.xlib.Settable;
  */
 public interface Job extends Gettable , Settable, Identifiable, Debuggable {
 
-  public void setLastResult( Object v) ;
+  public void setLastResult(Object v) ;
 
   public void clrLastResult() ;
 
@@ -39,7 +39,7 @@ public interface Job extends Gettable , Settable, Identifiable, Debuggable {
 
   public Event event() ;
 
-  public WorkFlow wflow();
+  public WorkStream wflow();
 }
 
 

@@ -36,14 +36,15 @@ public class For extends While {
     _loopCntr = loopCount;
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new ForDot(cur,this);
+  public Step createStep(Step cur) {
+    return new ForStep(cur, this);
   }
 
-  public void realize(FlowDot n) {
-    ForDot p= (ForDot) n;
-    super.realize(n);
-    p.withTest( new LoopExpr(p, _loopCntr));
+  public Step realize(Step me) {
+    ForStep p= (ForStep) me;
+    super.realize(me);
+    p.withTest(new LoopExpr(p, _loopCntr));
+    return me;
   }
 
   private CounterExpr _loopCntr;
@@ -56,13 +57,13 @@ public class For extends While {
 @SuppressWarnings("unused")
 class LoopExpr implements BoolExpr {
 
-  public LoopExpr(FlowDot pt, CounterExpr cnt) {
+  public LoopExpr(Step pt, CounterExpr cnt) {
     _point = pt;
     _cnt= cnt;
   }
 
   private CounterExpr _cnt;
-  private FlowDot _point;
+  private Step _point;
   private int _loop=0;
 
   public boolean ptest(Job j) {
@@ -86,9 +87,9 @@ class LoopExpr implements BoolExpr {
  * @author Kenneth Leung
  *
  */
-class ForDot extends WhileDot {
+class ForStep extends WhileStep {
 
-  public ForDot(FlowDot c, For a) {
+  public ForStep(Step c, For a) {
     super(c,a);
   }
 

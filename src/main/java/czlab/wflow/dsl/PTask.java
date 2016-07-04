@@ -48,13 +48,14 @@ public class PTask extends Activity {
     this("",w);
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new PTaskDot(cur, this);
+  public Step createStep(Step cur) {
+    return new PTaskStep(cur, this);
   }
 
-  public void realize(FlowDot n) {
-    PTaskDot s= (PTaskDot) n;
+  public Step realize(Step me) {
+    PTaskStep s= (PTaskStep) me;
     s.withWork(_work);
+    return me;
   }
 
   public Work work() { return _work; }
@@ -67,24 +68,24 @@ public class PTask extends Activity {
  * @author Kenneth Leung
  *
  */
-class PTaskDot extends FlowDot {
+class PTaskStep extends Step {
 
-  public PTaskDot(FlowDot c, PTask a) {
+  public PTaskStep(Step c, PTask a) {
     super(c,a);
   }
 
-  public PTaskDot withWork(Work w) {
+  public PTaskStep withWork(Work w) {
     _work=w;
     return this;
   }
 
-  public FlowDot eval(Job j) {
+  public Step handle(Job j) {
     //TLOG.debug("PTaskDot: {} about to exec work.", this.id )
-    Object a= _work.on(this,j);
-    FlowDot rc= next();
+    Object a= _work.eval(this,j);
+    Step rc= next();
 
     if (a instanceof Nihil) {
-      rc = new NihilDot( j );
+      rc = new NihilStep( j );
     }
     else
     if (a instanceof Activity) {

@@ -21,7 +21,7 @@ package czlab.wflow.server;
  */
 public interface ServiceHandler {
 
-  public Object handle(Object work, Object options) throws Exception;
+  public Object handle(Object arg, Object options) throws Exception;
 
   public Object handleError(Throwable t);
 

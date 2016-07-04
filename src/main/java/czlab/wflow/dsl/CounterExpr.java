@@ -12,15 +12,13 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow.dsl;
 
 
 /**
  * @author Kenneth Leung
  */
-@FunctionalInterface
-public interface CounterExpr {
+@FunctionalInterface public interface CounterExpr {
   public int gcount(Job job);
 }
 

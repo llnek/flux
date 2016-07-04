@@ -37,32 +37,31 @@ import czlab.wflow.dsl.*;
  * @author Kenneth Leung
  *
  */
-public class FlowServer implements ServerLike, ServiceHandler {
+public class WFlowServer implements ServerLike, ServiceHandler {
 
   public static final Logger TLOG=getLogger(lookup().lookupClass());
 
-  protected NulEmitter _mock;
   private JobCreator _jctor;
   private Schedulable _sch;
 
   public static void main(String[] args) {
     try {
-      FlowServer s= new FlowServer(NulCore.apply()).start();
+      WFlowServer s= new WFlowServer(ServerCore.apply()).start();
       Activity a, b, c,d,e,f;
-      a= PTask.apply((FlowDot cur, Job job)-> {
+      a= PTask.apply((Step cur, Job job)-> {
           System.out.println("A");
           return null;
       });
-      b= PTask.apply((FlowDot cur, Job job) -> {
+      b= PTask.apply((Step cur, Job job) -> {
           System.out.println("B");
           return null;
       });
       c= a.chain(b);
-      d= PTask.apply((FlowDot cur, Job job) -> {
+      d= PTask.apply((Step cur, Job job) -> {
           System.out.println("D");
           return null;
       });
-      e= PTask.apply((FlowDot cur, Job job) -> {
+      e= PTask.apply((Step cur, Job job) -> {
           System.out.println("E");
           return null;
       });
@@ -76,8 +75,7 @@ public class FlowServer implements ServerLike, ServiceHandler {
     }
   }
 
-  public FlowServer(final Schedulable s) {
-    _mock=new NulEmitter(this);
+  public WFlowServer(final Schedulable s) {
     _jctor= new JobCreator(this);
     _sch= s;
   }
@@ -87,14 +85,14 @@ public class FlowServer implements ServerLike, ServiceHandler {
     return _sch;
   }
 
-  public FlowServer start(Properties options) {
+  public WFlowServer start(Properties options) {
     if (_sch instanceof Activable) {
       ((Activable)_sch).activate(options);
     }
     return this;
   }
 
-  public FlowServer start() {
+  public WFlowServer start() {
     return start(new Properties());
   }
 
@@ -104,16 +102,16 @@ public class FlowServer implements ServerLike, ServiceHandler {
 
   @Override
   public Object handleError(Throwable t) {
-    WorkFlowEx ex = null;
-    if (t instanceof FlowError) {
-      FlowError fe = (FlowError)t;
-      FlowDot n=fe.getLastDot();
+    WorkStream ex = null;
+    if (t instanceof StepError) {
+      StepError fe = (StepError)t;
+      Step n=fe.lastStep();
       Object obj = null;
       if (n != null) {
         obj= n.job().wflow();
       }
-      if (obj instanceof WorkFlowEx) {
-        ex= (WorkFlowEx)obj;
+      if (obj instanceof WorkStream) {
+        ex= (WorkStream)obj;
         t= fe.getCause();
       }
     }
@@ -125,38 +123,33 @@ public class FlowServer implements ServerLike, ServiceHandler {
   }
 
   @Override
-  public Object handle(Object work, Object options) throws Exception {
-    WorkFlow wf= null;
-    if (work instanceof WHandler) {
-      final WHandler h = (WHandler)work;
-      wf=() -> {
-          return PTask.apply( (FlowDot cur, Job j) -> {
-            return h.run(j);
-          });
+  public Object handle(final Object arg, final Object options) throws Exception {
+    WorkStream wf= null;
+    if (arg instanceof Work) {
+      wf=new WorkStream() {
+        public Activity onError(Throwable t) { return null; }
+        public Activity startWith() {
+          return PTask.apply((Work) arg);
+        }
       };
     }
     else
-    if (work instanceof WorkFlow) {
-      wf= (WorkFlow) work;
+    if (arg instanceof WorkStream) {
+      wf= (WorkStream) arg;
     }
     else
-    if (work instanceof Work) {
-      wf= () -> {
-          return new PTask((Work)work);
-      };
-    }
-    else
-    if (work instanceof Activity) {
-      wf = () -> {
-        return (Activity) work;
+    if (arg instanceof Activity) {
+      wf=new WorkStream() {
+        public Activity onError(Throwable t) { return null; }
+        public Activity startWith() { return (Activity)arg; }
       };
     }
 
     if (wf == null) {
-      throw new FlowError("no valid workflow to handle.");
+      throw new StepError("no valid workflow to handle.");
     }
 
-    FlowDot end= Nihil.apply().reify( _jctor.newJob(wf));
+    Step end= Nihil.apply().reify( _jctor.newJob(wf));
     core().run( wf.startWith().reify(end));
     return null;
   }
@@ -169,17 +162,17 @@ class JobCreator {
 
   protected static final String JS_FLATLINE = "____flatline";
   protected static final String JS_LAST = "____lastresult";
-  private final FlowServer _server;
+  private final WFlowServer _server;
 
-  public JobCreator(FlowServer s) {
+  public JobCreator(WFlowServer s) {
     _server=s;
   }
 
-  public Job newJob(WorkFlow wf) {
-    return newJob(wf, new NonEvent(_server._mock));
+  public Job newJob(WorkStream wf) {
+    return newJob(wf, new NonEvent());
   }
 
-  public Job newJob(WorkFlow wf, final Event evt) {
+  public Job newJob(WorkStream wf, final Event evt) {
     return new Job() {
       private Map<Object,Object> _m= new HashMap<>();
       private long _id= CU.nextSeqLong();
@@ -239,7 +232,7 @@ class JobCreator {
       }
 
       @Override
-      public WorkFlow wflow() {
+      public WorkStream wflow() {
         return wf;
       }
 

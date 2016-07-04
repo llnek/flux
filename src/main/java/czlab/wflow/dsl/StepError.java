@@ -16,13 +16,33 @@
 package czlab.wflow.dsl;
 
 /**
- *
  * @author Kenneth Leung
- *
  */
-@FunctionalInterface
-public interface WorkFlow {
-  public Activity startWith();
+public class StepError extends Exception {
+
+  private static final long serialVersionUID = 1L;
+  private Step _step;
+
+  public StepError(Step n, String msg, Throwable e) {
+    super(msg,e);
+    _step=n;
+  }
+
+  public StepError(String msg,Throwable e) {
+    this(null, msg,e);
+  }
+
+  public StepError(Throwable e) {
+    this(null,"", e);
+  }
+
+  public StepError(String msg) {
+    this(null, msg,null);
+  }
+
+  public Step lastStep() { return _step; }
+
 }
+
 
 

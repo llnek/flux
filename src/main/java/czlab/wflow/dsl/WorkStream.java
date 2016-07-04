@@ -15,14 +15,17 @@
 
 package czlab.wflow.dsl;
 
-import czlab.xlib.CallableWithArgs;
-
 /**
  *
  * @author Kenneth Leung
  *
  */
-public interface WHandler extends CallableWithArgs {
+public interface WorkStream {
+
+  public Activity onError(Throwable e);
+
+  public Activity startWith();
+
 }
 
 

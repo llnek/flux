@@ -55,14 +55,14 @@ public class Switch extends Activity {
     return this;
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new SwitchDot(cur, this);
+  public Step createStep(Step cur) {
+    return new SwitchStep(cur, this);
   }
 
-  public void realize(FlowDot n) {
-    Map<Object,FlowDot> t= new HashMap<>();
-    SwitchDot p= (SwitchDot) n;
-    FlowDot nxt= p.next();
+  public Step realize(Step me) {
+    Map<Object,Step> t= new HashMap<>();
+    SwitchStep p= (SwitchStep) me;
+    Step nxt= p.next();
 
     for (Map.Entry<Object,Activity> en: _choices.entrySet()) {
       t.put(en.getKey(), en.getValue().reify(nxt) );
@@ -76,6 +76,7 @@ public class Switch extends Activity {
 
     p.withExpr(_expr);
 
+    return me;
   }
 
 }
@@ -87,38 +88,38 @@ public class Switch extends Activity {
  * @author Kenneth Leung
  *
  */
-class SwitchDot extends FlowDot {
+class SwitchStep extends Step {
 
-  private Map<Object,FlowDot> _cs = new HashMap<>();
+  private Map<Object,Step> _cs = new HashMap<>();
   private ChoiceExpr _expr= null;
-  private FlowDot _def = null;
+  private Step _def = null;
 
-  public SwitchDot withChoices(Map<Object,FlowDot> cs) {
+  public SwitchStep withChoices(Map<Object,Step> cs) {
     _cs.putAll(cs);
     return this;
   }
 
-  public SwitchDot(FlowDot c, Activity a) {
+  public SwitchStep(Step c, Activity a) {
     super(c,a);
   }
 
-  public SwitchDot withDef(FlowDot c) {
+  public SwitchStep withDef(Step c) {
     _def=c;
     return this;
   }
 
-  public SwitchDot withExpr(ChoiceExpr e) {
+  public SwitchStep withExpr(ChoiceExpr e) {
     _expr=e;
     return this;
   }
 
-  public Map<Object,FlowDot> choices() { return  _cs; }
+  public Map<Object,Step> choices() { return  _cs; }
 
-  public FlowDot defn() { return  _def; }
+  public Step defn() { return  _def; }
 
-  public FlowDot eval(Job j) {
+  public Step handle(Job j) {
     Object m= _expr.choice(j);
-    FlowDot a= null;
+    Step a= null;
 
     if (m != null) {
       a = _cs.get(m);

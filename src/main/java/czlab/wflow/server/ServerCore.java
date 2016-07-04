@@ -32,18 +32,17 @@ import java.util.TimerTask;
  *
  */
 @SuppressWarnings({ "rawtypes", "unchecked"})
-public class FlowCore implements Schedulable, Activable {
+public class ServerCore implements Schedulable, Activable {
 
-  public static FlowCore apply() { return new FlowCore(); }
+  public static ServerCore apply() { return new ServerCore(); }
 
   private Timer _timer;
   private Map _holdQ;
-  private Map _runQ;
   private TCore _core;
   private String _id;
 
-  private FlowCore() {
-    _id= "FlowScheduler#" + CU.nextSeqInt();
+  private ServerCore() {
+    _id= "ServerCore#" + CU.nextSeqInt();
   }
 
   public void activate(Object options) {
@@ -53,19 +52,17 @@ public class FlowCore implements Schedulable, Activable {
         (boolean) props.getOrDefault("trace", true));
     _timer= new Timer (_id, true);
     _holdQ= new ConcurrentHashMap();
-    _runQ= new ConcurrentHashMap();
     _core.start();
   }
 
   public void deactivate() {
     _timer.cancel();
     _holdQ.clear();
-    _runQ.clear();
     _core.stop();
   }
 
-  private void addTimer(Runnable w, long delay) {
-    FlowCore me= this;
+  private void addTimer(final Runnable w, final long delay) {
+    final ServerCore me= this;
     _timer.schedule(new TimerTask() {
       public void run() {
         me.wakeup(w);
@@ -99,7 +96,6 @@ public class FlowCore implements Schedulable, Activable {
   public void dequeue(Runnable w) {
     Object pid = xrefPid(w);
     if (pid != null) {
-      _runQ.remove(pid);
     }
   }
 
@@ -107,7 +103,6 @@ public class FlowCore implements Schedulable, Activable {
     Object pid = xrefPid(w);
     if (pid != null) {
       _holdQ.remove(pid);
-      _runQ.put(pid,w);
     }
   }
 
@@ -122,7 +117,6 @@ public class FlowCore implements Schedulable, Activable {
   @Override
   public void hold(Object pid, Runnable w) {
     if (pid != null && w != null) {
-      _runQ.remove(pid,w);
       _holdQ.put(pid, w);
     }
   }
@@ -142,7 +136,6 @@ public class FlowCore implements Schedulable, Activable {
   public void wakeAndRun(Object pid, Runnable w) {
     if (pid != null && w != null) {
       _holdQ.remove(pid);
-      _runQ.put(pid, w);
       run(w);
     }
   }

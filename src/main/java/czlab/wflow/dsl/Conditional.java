@@ -42,13 +42,13 @@ abstract class Conditional extends Activity {
  * @author Kenneth Leung
  *
  */
-abstract class ConditionalDot extends FlowDot {
+abstract class ConditionalStep extends Step {
 
-  protected ConditionalDot(FlowDot c, Conditional a) {
-    super(c,a);
+  protected ConditionalStep(Step c, Conditional a) {
+    super(c, a);
   }
 
-  public FlowDot withTest(BoolExpr expr) {
+  public Step withTest(BoolExpr expr) {
     _expr=expr;
     return this;
   }

@@ -56,8 +56,8 @@ class Group extends Composite {
     return this;
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new GroupDot(cur,this);
+  public Step createStep(Step cur) {
+    return new GroupStep(cur, this);
   }
 
 }
@@ -68,23 +68,23 @@ class Group extends Composite {
  * @author Kenneth Leung
  *
  */
-class GroupDot extends CompositeDot {
+class GroupStep extends CompositeStep {
 
-  public GroupDot(FlowDot c, Group a) {
+  public GroupStep(Step c, Group a) {
     super(c,a);
   }
 
-  public FlowDot eval(Job j) {
-    FlowDot rc= null;
+  public Step handle(Job j) {
+    Step rc= null;
 
-    if ( ! inner().isEmpty()) {
+    if (! inner().isEmpty()) {
       //TLOG.debug("Group: {} element(s.)",  _inner.size() );
-      FlowDot n=inner().next();
+      Step n=inner().next();
       Activity d=n.getDef();
       if (d.hasName()) {
-        TLOG.debug("FlowDot##{} :eval().", d.getName());
+        TLOG.debug("Step##{} :eval().", d.getName());
       }
-      rc = n.eval(j);
+      rc = n.handle(j);
     } else {
       //TLOG.debug("Group: no more elements.");
       rc= next();

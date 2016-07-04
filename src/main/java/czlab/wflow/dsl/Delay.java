@@ -12,7 +12,6 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow.dsl;
 
 /**
@@ -46,13 +45,14 @@ public class Delay extends Activity {
     this("", 0L);
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new DelayDot(cur,this);
+  public Step createStep(Step cur) {
+    return new DelayStep(cur,this);
   }
 
-  public void realize(FlowDot fp) {
-    DelayDot p= (DelayDot) fp;
+  public Step realize(Step me) {
+    DelayStep p= (DelayStep) me;
     p.withDelay(_delayMillis);
+    return me;
   }
 
   public long delayMillis() {
@@ -60,6 +60,7 @@ public class Delay extends Activity {
   }
 
   private long _delayMillis;
+
 }
 
 
@@ -68,16 +69,16 @@ public class Delay extends Activity {
  * @author Kenneth Leung
  *
  */
-class DelayDot extends FlowDot {
+class DelayStep extends Step {
 
   public long delayMillis() { return _delayMillis; }
-  public FlowDot eval(Job j) { return this; }
+  public Step handle(Job j) { return this; }
 
-  public DelayDot(FlowDot c, Delay a) {
+  public DelayStep(Step c, Delay a) {
     super(c,a);
   }
 
-  public FlowDot withDelay(long millis) {
+  public Step withDelay(long millis) {
     _delayMillis=millis;
     return this;
   }

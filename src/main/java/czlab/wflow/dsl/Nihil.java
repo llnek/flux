@@ -29,15 +29,15 @@ public class Nihil  extends Activity {
 
   public Nihil() {}
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new NihilDot(cur.job());
+  public Step createStep(Step cur) {
+    return new NihilStep(cur.job());
   }
 
-  public FlowDot reify(Job j) throws Exception {
-    return new NihilDot(j);
+  public Step reify(Job j) throws Exception {
+    return new NihilStep(j);
   }
 
-  public void realize(FlowDot p) {}
+  public Step realize(Step me) { return me; }
 
 }
 
@@ -47,12 +47,12 @@ public class Nihil  extends Activity {
  * @author Kenneth Leung
  *
  */
-class NihilDot extends FlowDot {
+class NihilStep extends Step {
 
-  public FlowDot eval(Job j) { return this; }
-  public FlowDot next() { return this; }
+  public Step handle(Job j) { return this; }
+  public Step next() { return this; }
 
-  public NihilDot(Job j) {
+  public NihilStep(Job j) {
     super(j);
   }
 

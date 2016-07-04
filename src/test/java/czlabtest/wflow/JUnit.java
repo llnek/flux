@@ -39,6 +39,12 @@ public class JUnit {
     new JUnit4TestAdapter(JUnit.class);
   }
 
+  private static void pause(long millis) {
+    try {
+      Thread.currentThread().sleep(millis);
+    } catch (Throwable t) {}
+  }
+
   @BeforeClass
   public static void iniz() throws Exception    {
   }
@@ -62,85 +68,88 @@ public class JUnit {
 
   @Test
   public void testWFlowSplit() throws Exception {
-    FlowServer s= new FlowServer(NulCore.apply());
+    WFlowServer s= new WFlowServer(ServerCore.apply());
     s.start();
     final AtomicInteger out= new AtomicInteger(0);
     int testValue=10;
     Activity a,b,c;
-    a=PTask.apply( (FlowDot n, Job j) -> {
+    a=PTask.apply( (Step n, Job j) -> {
       out.set(10);
       //System.out.println("All Right! " + System.currentTimeMillis());
       return null;
     });
-    b=PTask.apply( (FlowDot n, Job j) -> {
+    b=PTask.apply( (Step n, Job j) -> {
       //System.out.println("Dude! " + System.currentTimeMillis());
-      try { Thread.sleep(2000);  } catch (Exception e) {}
+      try { Thread.sleep(1000);  } catch (Exception e) {}
       return null;
     });
-    c=PTask.apply( (FlowDot n, Job j) -> {
+    c=PTask.apply( (Step n, Job j) -> {
       //System.out.println("Yo! " + System.currentTimeMillis());
-      try { Thread.sleep(3000);  } catch (Exception e) {}
+      try { Thread.sleep(1500);  } catch (Exception e) {}
       return null;
     });
     a=Split.applyAnd(a).includeMany(b,c);
     s.handle(a, null);
-    //try { Thread.sleep(5000);  } catch (Exception e) {}
+
+    pause(5000);
     assertEquals(testValue, out.get());
 
-    a=PTask.apply( (FlowDot n, Job j) -> {
+    a=PTask.apply( (Step n, Job j) -> {
       out.set(10);
       //System.out.println("All Right! " + System.currentTimeMillis());
       return null;
     });
-    b=PTask.apply( (FlowDot n, Job j) -> {
+    b=PTask.apply( (Step n, Job j) -> {
       //System.out.println("Dude! " + System.currentTimeMillis());
-      try { Thread.sleep(2000);  } catch (Exception e) {}
+      try { Thread.sleep(1000);  } catch (Exception e) {}
       return null;
     });
-    c=PTask.apply( (FlowDot n, Job j) -> {
+    c=PTask.apply( (Step n, Job j) -> {
       //System.out.println("Yo! " + System.currentTimeMillis());
-      try { Thread.sleep(3000);  } catch (Exception e) {}
+      try { Thread.sleep(1500);  } catch (Exception e) {}
       return null;
     });
     a=Split.applyOr(a).includeMany(b,c);
     s.handle(a, null);
-    //try { Thread.sleep(5000);  } catch (Exception e) {}
+
+    pause(5000);
     assertEquals(testValue, out.get());
 
 
-    a=PTask.apply( (FlowDot n, Job j) -> {
+    a=PTask.apply( (Step n, Job j) -> {
       out.set(10);
       //System.out.println("****All Right! " + System.currentTimeMillis());
       return null;
     });
-    b=PTask.apply( (FlowDot n, Job j) -> {
+    b=PTask.apply( (Step n, Job j) -> {
       //System.out.println("Dude! " + System.currentTimeMillis());
       //try { Thread.sleep(2000);  } catch (Exception e) {}
       return null;
     });
-    c=PTask.apply( (FlowDot n, Job j) -> {
+    c=PTask.apply( (Step n, Job j) -> {
      // System.out.println("Yo! " + System.currentTimeMillis());
       //try { Thread.sleep(3000);  } catch (Exception e) {}
       return null;
     });
     a=Split.apply().includeMany(b,c).chain(a);
     s.handle(a, null);
-    //try { Thread.sleep(5000);  } catch (Exception e) {}
+
+    pause(5000);
     assertEquals(testValue, out.get());
   }
 
   @Test
   public void testWFlowIf() throws Exception {
-    FlowServer s= new FlowServer(NulCore.apply());
+    WFlowServer s= new WFlowServer(ServerCore.apply());
     s.start();
     AtomicInteger out= new AtomicInteger(0);
     int testValue=10;
     Activity a;
-    Activity t= new PTask( (FlowDot n, Job j)-> {
+    Activity t= new PTask( (Step n, Job j)-> {
       out.set(10);
       return null;
     });
-    Activity e= new PTask( (FlowDot n, Job j)-> {
+    Activity e= new PTask( (Step n, Job j)-> {
       out.set(20);
       return null;
     });
@@ -148,14 +157,15 @@ public class JUnit {
       return true;
     }, t,e);
     s.handle(a,  null);
+    pause(1500);
     assertEquals(testValue, out.get());
 
     testValue=20;
-    t= new PTask( (FlowDot n, Job j)-> {
+    t= new PTask( (Step n, Job j)-> {
       out.set(10);
       return null;
     });
-    e= new PTask( (FlowDot n, Job j)-> {
+    e= new PTask( (Step n, Job j)-> {
       out.set(20);
       return null;
     });
@@ -163,22 +173,23 @@ public class JUnit {
       return false;
     }, t,e);
     s.handle(a,  null);
+    pause(1500);
     assertEquals(testValue, out.get());
 
   }
 
   @Test
   public void testWFlowSwitch() throws Exception {
-    FlowServer s= new FlowServer(NulCore.apply());
+    WFlowServer s= new WFlowServer(ServerCore.apply());
     s.start();
     AtomicInteger out= new AtomicInteger(0);
     final int testValue=10;
     Activity a=null;
-    a= PTask.apply( (FlowDot cur, Job j) -> {
+    a= PTask.apply( (Step cur, Job j) -> {
         out.set(10);
         return null;
     });
-    Activity dummy= new PTask( (FlowDot n, Job j)-> {
+    Activity dummy= new PTask( (Step n, Job j)-> {
       return null;
     });
     a=Switch.apply((Job j) -> {
@@ -187,6 +198,7 @@ public class JUnit {
     .withChoice("goodbye", dummy)
     .withChoice("bonjour", a);
     s.handle(a,null);
+    pause(1500);
     assertEquals(testValue, out.get());
 
     a=Switch.apply((Job j) -> {
@@ -195,35 +207,37 @@ public class JUnit {
     .withChoice("goodbye", dummy)
     .withDft(a);
     s.handle(a,null);
+    pause(1500);
     assertEquals(testValue, out.get());
 
   }
 
   @Test
   public void testWFlowFor() throws Exception {
-    FlowServer s= new FlowServer(NulCore.apply());
+    WFlowServer s= new WFlowServer(ServerCore.apply());
     s.start();
     AtomicInteger out= new AtomicInteger(0);
     final int testValue=10;
     Activity a=null;
-    a= PTask.apply( (FlowDot cur, Job j) -> {
+    a= PTask.apply( (Step cur, Job j) -> {
         //System.out.println("index = " + j.getv(For.JS_INDEX));
         out.incrementAndGet();
         return null;
     });
     a=For.apply( (Job j) -> { return testValue; }, a);
     s.handle(a,null);
+    pause(1500);
     assertEquals(testValue, out.get());
   }
 
   @Test
   public void testWFlowWhile() throws Exception {
-    FlowServer s= new FlowServer(NulCore.apply());
+    WFlowServer s= new WFlowServer(ServerCore.apply());
     s.start();
     AtomicInteger out= new AtomicInteger(0);
     final int testValue=10;
     Activity a=null;
-    a= PTask.apply( (FlowDot cur, Job j) -> {
+    a= PTask.apply( (Step cur, Job j) -> {
         int v= (int) j.getv("count");
         j.setv("count", (v+1));
         out.getAndIncrement();
@@ -235,9 +249,10 @@ public class JUnit {
       if (v==null) {
         j.setv("count", 0);
       }
-      return (int)j.getv("count")< testValue;
+      return (int)j.getv("count") < testValue;
     }, a);
     s.handle(a,null);
+    pause(1500);
     assertEquals(testValue, out.get());
   }
 

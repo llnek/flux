@@ -46,16 +46,17 @@ public class If extends Conditional {
     this(expr, then, null );
   }
 
-  public FlowDot reifyDot(FlowDot cur) {
-    return new IfDot(cur,this);
+  public Step createStep(Step cur) {
+    return new IfStep(cur, this);
   }
 
-  public void realize(FlowDot n) {
-    IfDot s= (IfDot) n;
-    FlowDot nx= s.next();
+  public Step realize(Step me) {
+    IfStep s= (IfStep) me;
+    Step nx= s.next();
     s.withElse( (_elseCode ==null) ? nx : _elseCode.reify(nx) );
     s.withThen( _thenCode.reify(nx));
     s.withTest( expr());
+    return me;
   }
 
 }
@@ -66,29 +67,29 @@ public class If extends Conditional {
  * @author Kenneth Leung
  *
  */
-class IfDot extends ConditionalDot {
+class IfStep extends ConditionalStep {
 
-  public IfDot(FlowDot c, If a) {
+  public IfStep(Step c, If a) {
     super(c,a);
   }
 
-  private FlowDot _then= null;
-  private FlowDot _else= null;
+  private Step _then= null;
+  private Step _else= null;
 
-  public IfDot withElse(FlowDot n ) {
+  public IfStep withElse(Step n ) {
     _else=n;
     return this;
   }
 
-  public IfDot withThen(FlowDot n ) {
+  public IfStep withThen(Step n ) {
     _then=n;
     return this;
   }
 
-  public FlowDot eval(Job j) {
+  public Step handle(Job j) {
     boolean b = test(j);
     //TLOG.debug("If: test {}", (b) ? "OK" : "FALSE");
-    FlowDot rc = b ? _then : _else;
+    Step rc = b ? _then : _else;
     realize();
     return rc;
   }

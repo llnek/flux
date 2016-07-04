@@ -30,40 +30,40 @@ import czlab.xlib.Schedulable;
  *
  */
 @SuppressWarnings("unused")
-public abstract class FlowDot implements RunnableWithId {
+public abstract class Step implements RunnableWithId {
 
   public static final Logger TLOG = getLogger(lookup().lookupClass());
 
   private long _pid = CU.nextSeqLong();
 
-  private FlowDot _nextStep;
-  protected Job _job;
   private Activity _defn;
+  private Step _nextStep;
+  protected Job _job;
 
   /**
    * @param c
    * @param a
    */
-  protected FlowDot(FlowDot c, Activity a) {
+  protected Step(Step c, Activity a) {
     this( c.job() );
     _nextStep=c;
     _defn=a;
   }
 
-  protected FlowDot(Job j) {
+  protected Step(Job j) {
     _job=j;
     _defn= new Nihil();
   }
 
-  public FlowDot next() { return _nextStep; }
   public Activity getDef() { return _defn; }
+  public Step next() { return _nextStep; }
   public Object id() { return _pid; }
 
-  public abstract FlowDot eval(Job j);
+  public abstract Step handle(Job j);
 
   protected void postRealize() {}
 
-  protected FlowDot realize() {
+  protected Step realize() {
     getDef().realize(this);
     postRealize();
     return this;
@@ -75,7 +75,7 @@ public abstract class FlowDot implements RunnableWithId {
 
   public Job job() { return _job; }
 
-  public void setNext(FlowDot n) {
+  public void setNext(Step n) {
     _nextStep=n;
   }
 
@@ -88,21 +88,21 @@ public abstract class FlowDot implements RunnableWithId {
     ServiceHandler svc = null;
     Activity err= null,
              d= getDef();
-    FlowDot rc= null;
+    Step rc= null;
 
     core().dequeue(this);
 
     try {
       if (d.hasName()) {
-        TLOG.debug("FlowDot##{} :eval()", d.getName());
+        TLOG.debug("Step##{} :handle()", d.getName());
       }
-      rc= eval( _job );
+      rc= handle( _job );
     } catch (Throwable e) {
       if (par instanceof ServiceHandler) {
         svc= (ServiceHandler)par;
       }
       if (svc != null) {
-        Object ret= svc.handleError(new FlowError(this,"",e));
+        Object ret= svc.handleError(new StepError(this,"",e));
         if (ret instanceof Activity) {
           err= (Activity)ret;
         }
@@ -111,25 +111,25 @@ public abstract class FlowDot implements RunnableWithId {
         TLOG.error("",e);
         err= Nihil.apply();
       }
-      rc= err.reify( new NihilDot( _job) );
+      rc= err.reify( new NihilStep( _job) );
     }
 
     if (rc==null) {
-      TLOG.debug("FlowDot: rc==null => skip");
+      TLOG.debug("Step: rc==null => skip");
       // indicate skip, happens with joins
     } else {
       runAfter(rc);
     }
   }
 
-  private void runAfter(FlowDot rc) {
-    FlowDot np= rc.next();
+  private void runAfter(Step rc) {
+    Step np= rc.next();
 
-    if (rc instanceof DelayDot) {
-      core().postpone( np, ((DelayDot) rc).delayMillis() );
+    if (rc instanceof DelayStep) {
+      core().postpone( np, ((DelayStep) rc).delayMillis() );
     }
     else
-    if (rc instanceof NihilDot) {
+    if (rc instanceof NihilStep) {
       //rc.job().clear();  don't do this
       //end
     }
@@ -140,7 +140,7 @@ public abstract class FlowDot implements RunnableWithId {
 
   public void XXXfinalize() throws Throwable {
     super.finalize();
-    TLOG.debug("FlowDot: " + getClass().getName() + " finz'ed");
+    TLOG.debug(getClass().getSimpleName() + " finz'ed");
   }
 
 }

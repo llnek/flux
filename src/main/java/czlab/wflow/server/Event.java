@@ -24,7 +24,7 @@ import czlab.xlib.Identifiable;
  */
 public interface Event extends Identifiable {
 
-  public EmitterSource emitter();
+  public EventEmitter emitter();
 
 }
 

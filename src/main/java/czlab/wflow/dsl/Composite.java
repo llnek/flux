@@ -12,7 +12,6 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow.dsl;
 
 import java.util.ArrayList;
@@ -42,9 +41,10 @@ abstract class Composite extends Activity {
     return _innards;
   }
 
-  public void realize(FlowDot fp) {
-    CompositeDot p= (CompositeDot) fp;
+  public Step realize(Step me) {
+    CompositeStep p= (CompositeStep) me;
     p.reifyInner( listChildren() );
+    return me;
   }
 
 }
@@ -55,21 +55,22 @@ abstract class Composite extends Activity {
  * @author Kenneth Leung
  *
  */
-abstract class CompositeDot extends FlowDot {
+abstract class CompositeStep extends Step {
 
-  protected CompositeDot(FlowDot c, Activity a) {
-    super(c,a);
-  }
-
-  public void reifyInner( Iterable<Activity> c) {
+  public void reifyInner(Iterable<Activity> c) {
     _inner=new Innards(this,c);
   }
+
+  protected CompositeStep(Step c, Activity a) {
+    super(c, a);
+  }
+
+  public Innards inner() { return _inner; }
 
   public void reifyInner() {
     _inner=new Innards(this);
   }
 
-  public Innards inner() { return _inner; }
   protected void setInner(Innards n) {
     _inner=n;
   }
@@ -84,27 +85,25 @@ abstract class CompositeDot extends FlowDot {
  */
 class Innards {
 
-  public boolean isEmpty() { return  _acts.size() == 0; }
+  public boolean isEmpty() { return _acts.size() == 0; }
 
   private List<Activity> _acts= new ArrayList<>();
-  private FlowDot _outer;
+  private Step _outer;
 
-  public Innards(FlowDot c, Iterable<Activity> a) {
+  public Innards(Step c, Iterable<Activity> a) {
     this(c);
     for (Activity n: a) {
-    	_acts.add(n);
+      _acts.add(n);
     }
   }
 
-  public Innards(FlowDot outer) {
+  public Innards(Step outer) {
     _outer= outer;
   }
 
-  public FlowDot next() {
+  public Step next() {
     return _acts.size() > 0
-      ? _acts.remove(0).reify(_outer)
-      :
-      null;
+      ? _acts.remove(0).reify(_outer) : null;
   }
 
   public int size() { return _acts.size(); }
