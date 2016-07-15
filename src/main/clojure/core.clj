@@ -124,16 +124,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod declActivity
-  NullJoin
+  Join
   [cz & xs]
-  (reify NullJoin
+  (reify Join
     (create [this c] (declStep this c))
     (init [this s] s)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod declStep
-  NullJoin
+  Join
   [actDef & [curStep]]
   (let []
     (reify
@@ -146,10 +146,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod declActivity
-  And
+  JoinAnd
   [cz & [branches body]]
 
-  (reify And
+  (reify JoinAnd
     (create [this c] (declStep this c))
     (init [this s]
       (let [x (.next s)
@@ -162,7 +162,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod declStep
-  And
+  JoinAnd
   [actDef & [curStep]]
   (let [info (atom {})]
     (reify
@@ -224,3 +224,164 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defmethod declActivity
+  If
+  [cz & [bexpr then else]]
+  (reify If
+    (create [this c] (declStep this c))
+    (init [this s]
+      (let [nx (.next s)
+            e (if (some? else) (.reify else nx) nil)
+            t (.reify then nx)]
+        (->> {:test bexpr
+              :then t
+              :else e}
+             (.init s))
+        s))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod declStep
+  If
+  [actDef & [curStep]]
+  (let [info (atom {})]
+    (reify
+      (init [_ m] (reset! info m))
+      (attrs [_] @info)
+      (isa [_] actDef)
+      (next [_] curStep)
+      (handle [_ j]
+        (let [b (.ptest (:test @info) j)
+              rc (if b (:then @info) (:else @info))]
+          (.init actDef this)
+          rc)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod declActivity
+  While
+  [cz & [bexpr body]]
+  {:pre [(some? body)]}
+  (reify If
+    (create [this c] (declStep this c))
+    (init [this s]
+      (->> {:test bexpr
+            :body (.reify body s)}
+           (.init this))
+      s)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod declStep
+  While
+  [actDef & [curStep]]
+  (let [info (atom {})]
+    (reify
+      (init [_ m] (reset! info m))
+      (attrs [_] @info)
+      (isa [_] actDef)
+      (next [_] curStep)
+      (handle [_ j]
+        (let [rc (object-array [this])
+              nx (.next this)]
+          (if-not (.ptest (:bexpr info) j)
+            (do
+              (.init actDef this)
+              (aset rc 0 nx))
+            ;;normally n is null, but if it is not
+            ;;switch the body to it.
+            (when-some [n (.handle (:body @info) j)]
+              (cond
+                (inst? Delay (.isa n))
+                (do
+                  (.setNext n rc)
+                  (aset rc 0 n))
+
+                (not (= n this))
+                ;;(swap! info assoc :body n)
+                (println "dont handle now"))))
+          rc)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod declActivity
+  Split
+  [cz & xs]
+  (let [merger (nth xs 0)
+        body (nth xs 1)
+        bs (drop 2 xs)
+        join (cond
+               (= :and merger) (declActivity AndJoin cnt body)
+               (= :or merger) (declActivity OrJoin cnt body)
+               :else (declActivity NulJoin body))]
+    (reify Split
+      (create [this c] (declStep this c))
+      (init [this p]
+        (let [nx (.next p)
+              s (.reify join nx)]
+          (->> {:forks (Innards. s (listC))
+                :joinStyle merger}
+               (.init s))
+          s)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod declStep
+  Split
+  [actDef & [curStep]]
+  (let [info (atom {})]
+    (reify
+      (init [_ m] (reset! info m))
+      (attrs [_] @info)
+      (isa [_] actDef)
+      (next [_] curStep)
+      (handle [_ j]
+        (let [rc null]
+          (while (not (.isEmpty (:forks @info)))
+            (.run (.core this) (.next (:forks @info))))
+          (.init actDef this)
+          (if (or (= :and (:joinStyle @info))
+                  (= :or (:joinStyle @info)))
+            (.next this)
+            nil))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod declActivity
+  Group
+  [cz & xs]
+  (let []
+    (reify Group
+      (create [this c] (declStep this c))
+      (init [this p]
+        (->> {:list (Innards. p (listC))}
+             (.init p))
+        p))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod declStep
+  Group
+  [actDef & [curStep]]
+  (let [info (atom {})]
+    (reify
+      (init [_ m] (reset! info m))
+      (attrs [_] @info)
+      (isa [_] actDef)
+      (next [_] curStep)
+      (handle [_ j]
+        (let [nx (.next this)
+              rc (object-arry [nil])]
+          (if-not (.isEmpty (:list @info))
+            (let [n (.next (:list @info))
+                  d (.isa n)]
+              (aset rc 0 (.handle n j)))
+            (do
+              (.init actDef this)
+              (aset rc 0 nx)))
+          (aget rc 0))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+
+
