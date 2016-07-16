@@ -14,36 +14,28 @@
 
 package czlab.wflow;
 
-import czlab.xlib.RunnableWithId;
+import czlab.xlib.Named;
 
 /**
+ * An TaskDef is the building block of a workflow.
+ *
  * @author Kenneth Leung
  *
  */
-public interface Step extends RunnableWithId {
+public interface TaskDef extends Named {
+
+  /**
+   * Instantiate a *runtime* version of this work unit as it becomes
+   * part of the Workflow.
+   *
+   * @param cur current step.
+   * @return a *runtime* version of this TaskDef.
+   */
+  public Step create(Step cur);
 
   /**/
-  public Step handle(Job j);
-
-  /**/
-  public setNext(Step n);
-
-  /**/
-  public TaskDef proto();
-
-  /**/
-  public Job job();
-
-  /**/
-  public Object attrs();
-
-  /**/
-  public Step next();
-
-  /**/
-  public void rerun();
+  public Step create(Job j);
 
 }
-
 
 

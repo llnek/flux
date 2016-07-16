@@ -14,36 +14,44 @@
 
 package czlab.wflow;
 
-import czlab.xlib.RunnableWithId;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
+ *
  * @author Kenneth Leung
  *
  */
-public interface Step extends RunnableWithId {
+public class Innards {
 
   /**/
-  public Step handle(Job j);
+  public boolean isEmpty() { return _acts.size() == 0; }
+
+  private List<TaskDef> _acts= new ArrayList<>();
+  private Step _outer;
 
   /**/
-  public setNext(Step n);
+  public Innards(Step c, Iterable<TaskDef> a) {
+    this(c);
+    for (TaskDef n: a) {
+      _acts.add(n);
+    }
+  }
 
   /**/
-  public TaskDef proto();
+  public Innards(Step outer) {
+    _outer= outer;
+  }
 
   /**/
-  public Job job();
+  public Step next() {
+    return _acts.size() > 0
+      ? _acts.remove(0).reify(_outer) : null;
+  }
 
   /**/
-  public Object attrs();
-
-  /**/
-  public Step next();
-
-  /**/
-  public void rerun();
+  public int size() { return _acts.size(); }
 
 }
-
 
 

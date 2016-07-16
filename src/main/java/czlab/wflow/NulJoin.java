@@ -14,36 +14,13 @@
 
 package czlab.wflow;
 
-import czlab.xlib.RunnableWithId;
-
 /**
+ *
  * @author Kenneth Leung
  *
  */
-public interface Step extends RunnableWithId {
-
-  /**/
-  public Step handle(Job j);
-
-  /**/
-  public setNext(Step n);
-
-  /**/
-  public TaskDef proto();
-
-  /**/
-  public Job job();
-
-  /**/
-  public Object attrs();
-
-  /**/
-  public Step next();
-
-  /**/
-  public void rerun();
+public interface NulJoin extends Merge {
 
 }
-
 
 

@@ -12,7 +12,6 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow;
 
 /**
@@ -21,78 +20,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-class Group extends Composite {
-
-  public static Group apply(Activity a) {
-    return new Group(a);
-  }
-
-  public Group(String name, Activity a) {
-    super(name);
-    if (a != null) { add(a); }
-  }
-
-  public Group(Activity a) {
-    this("",a);
-  }
-
-  public Group(String name) {
-    this(name, null);
-  }
-
-  public Group() {
-    this("");
-  }
-
-  public Activity chainMany(Activity... acts) {
-    for (Activity a: acts) {
-      add(a);
-    }
-    return this;
-  }
-
-  public Activity chain(Activity a) {
-    add(a);
-    return this;
-  }
-
-  public Step createStep(Step cur) {
-    return new GroupStep(cur, this);
-  }
-
+public interface Group extends Composite {
 }
 
-
-/**
- *
- * @author Kenneth Leung
- *
- */
-class GroupStep extends CompositeStep {
-
-  public GroupStep(Step c, Group a) {
-    super(c,a);
-  }
-
-  public Step handle(Job j) {
-    Step rc= null;
-
-    if (! inner().isEmpty()) {
-      //TLOG.debug("Group: {} element(s.)",  _inner.size() );
-      Step n=inner().next();
-      Activity d=n.getDef();
-      if (d.hasName()) {
-        TLOG.debug("Step##{} :eval().", d.getName());
-      }
-      rc = n.handle(j);
-    } else {
-      //TLOG.debug("Group: no more elements.");
-      rc= next();
-      realize();
-    }
-
-    return rc;
-  }
-
-}
 

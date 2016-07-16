@@ -12,92 +12,16 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow;
 
+
+
 /**
  * @author Kenneth Leung
  *
  */
-public class PTask extends Activity {
+public interface PTask extends TaskDef {
 
-  public static PTask PTaskWrapper(String name, Work w) {
-    return new PTask(name, w);
-  }
-
-  public static PTask PTaskWrapper(Work w) {
-    return new PTask("",w);
-  }
-
-  public static PTask apply(String name, Work w) {
-    return new PTask(name, w);
-  }
-
-  public static PTask apply(Work w) {
-    return apply("",w);
-  }
-
-  private Work _work;
-
-  public PTask(String name, Work w) {
-    super(name);
-    _work=w;
-  }
-
-  public PTask(Work w) {
-    this("",w);
-  }
-
-  public Step createStep(Step cur) {
-    return new PTaskStep(cur, this);
-  }
-
-  public Step realize(Step me) {
-    PTaskStep s= (PTaskStep) me;
-    s.withWork(_work);
-    return me;
-  }
-
-  public Work work() { return _work; }
-
-}
-
-
-/**
- *
- * @author Kenneth Leung
- *
- */
-class PTaskStep extends Step {
-
-  public PTaskStep(Step c, PTask a) {
-    super(c,a);
-  }
-
-  public PTaskStep withWork(Work w) {
-    _work=w;
-    return this;
-  }
-
-  public Step handle(Job j) {
-    //TLOG.debug("PTaskDot: {} about to exec work.", this.id )
-    Object a= _work.eval(this,j);
-    Step rc= next();
-
-    if (a instanceof Nihil) {
-      rc = new NihilStep( j );
-    }
-    else
-    if (a instanceof Activity) {
-      rc = ((Activity) a).reify(rc);
-    }
-    else {
-    }
-
-    return rc;
-  }
-
-  private Work _work= null;
 }
 
 

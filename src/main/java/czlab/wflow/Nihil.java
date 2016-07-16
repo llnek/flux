@@ -12,7 +12,6 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow;
 
 /**
@@ -21,40 +20,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public class Nihil  extends Activity {
-
-  public static Nihil apply() {
-    return new Nihil();
-  }
-
-  public Nihil() {}
-
-  public Step createStep(Step cur) {
-    return new NihilStep(cur.job());
-  }
-
-  public Step reify(Job j) throws Exception {
-    return new NihilStep(j);
-  }
-
-  public Step realize(Step me) { return me; }
-
-}
-
-
-/**
- *
- * @author Kenneth Leung
- *
- */
-class NihilStep extends Step {
-
-  public Step handle(Job j) { return this; }
-  public Step next() { return this; }
-
-  public NihilStep(Job j) {
-    super(j);
-  }
+public interface Nihil extends TaskDef {
 
 }
 

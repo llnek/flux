@@ -12,52 +12,22 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow;
 
 /**
  * @author Kenneth Leung
  *
  */
-abstract class Conditional extends Activity {
+public interface class Merge  extends TaskDef {
 
-  protected Conditional(String name, BoolExpr expr) {
-    super(name);
-    _expr= expr;
-  }
+  /**/
+  public boolean hasInnerBody();
 
-  protected Conditional(BoolExpr expr) {
-    this("", expr);
-  }
+  /**/
+  public int countBranches();
 
-  public BoolExpr expr() { return _expr; }
+  /**/
+  public TaskDef innerBody();
 
-  private BoolExpr _expr;
 }
-
-
-
-/**
- *
- * @author Kenneth Leung
- *
- */
-abstract class ConditionalStep extends Step {
-
-  protected ConditionalStep(Step c, Conditional a) {
-    super(c, a);
-  }
-
-  public Step withTest(BoolExpr expr) {
-    _expr=expr;
-    return this;
-  }
-
-  protected boolean test(Job j) {
-    return _expr.ptest(j);
-  }
-
-  private BoolExpr _expr;
-}
-
 

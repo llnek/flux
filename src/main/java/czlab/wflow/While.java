@@ -12,7 +12,6 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow;
 
 
@@ -20,91 +19,8 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-@SuppressWarnings("unused")
-public class While extends Conditional {
+public interface While extends Conditional {
 
-  public static While apply(String name, BoolExpr b, Activity body) {
-    return new While(name, b,body);
-  }
-
-  public static While apply(BoolExpr b, Activity body) {
-    return apply("", b,body);
-  }
-
-  public While(String name, BoolExpr expr, Activity b) {
-    super(name, expr);
-    _body=b;
-  }
-
-  public While(BoolExpr expr, Activity b) {
-    this("", expr, b);
-  }
-
-  public Step createStep(Step cur) {
-    return new WhileStep(cur, this);
-  }
-
-  public Step realize(Step me) {
-    WhileStep p= (WhileStep) me;
-    assert(_body != null);
-    p.withBody(_body.reify(p));
-    p.withTest( expr() );
-    return me;
-  }
-
-  private Activity _body;
-}
-
-
-
-/**
- *
- * @author Kenneth Leung
- *
- */
-class WhileStep extends ConditionalStep {
-
-  public WhileStep(Step c, While a) {
-    super(c,a);
-  }
-
-  public Step handle(Job j) {
-    Step n, rc = this;
-
-    if ( ! test(j)) {
-      //TLOG.debug("WhileDot: test-condition == false")
-      rc= next();
-      realize();
-    } else {
-      //TLOG.debug("WhileDot: looping - eval body")
-      //normally n is null, but if it is not
-      //switch the body to it.
-      n= _body.handle(j);
-      if (n != null) {
-
-        if (n instanceof DelayStep) {
-          ((DelayStep) n).setNext(rc);
-          rc=n;
-        }
-        else
-        if (n != this){
-          TLOG.error("WhileDot##{}.body should not return anything.",
-              getDef().getName());
-          // let's not do this now
-          //_body = n;
-        }
-      }
-    }
-
-    return rc;
-  }
-
-  public WhileStep withBody(Step b) {
-    _body=b;
-    return this;
-  }
-
-  private Step _body = null;
 }
 
 

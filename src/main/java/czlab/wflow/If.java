@@ -12,89 +12,13 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow;
 
 /**
  * @author Kenneth Leung
  *
  */
-public class If extends Conditional {
-
-  public static If apply(BoolExpr expr,Activity then, Activity elze) {
-    return new If(expr,then,elze);
-  }
-
-  private Activity _thenCode;
-  private Activity _elseCode;
-
-  public If(String name, BoolExpr expr,Activity then, Activity elze) {
-    super(name, expr);
-    _elseCode= elze;
-    _thenCode= then;
-  }
-
-  public If(BoolExpr expr,Activity then, Activity elze) {
-    this("", expr, then, elze);
-  }
-
-  public If(String name, BoolExpr expr,Activity then) {
-    this(name, expr, then, null);
-  }
-
-  public If(BoolExpr expr,Activity then) {
-    this(expr, then, null );
-  }
-
-  public Step createStep(Step cur) {
-    return new IfStep(cur, this);
-  }
-
-  public Step realize(Step me) {
-    IfStep s= (IfStep) me;
-    Step nx= s.next();
-    s.withElse( (_elseCode ==null) ? nx : _elseCode.reify(nx) );
-    s.withThen( _thenCode.reify(nx));
-    s.withTest( expr());
-    return me;
-  }
+public interface If extends Conditional {
 
 }
-
-
-/**
- *
- * @author Kenneth Leung
- *
- */
-class IfStep extends ConditionalStep {
-
-  public IfStep(Step c, If a) {
-    super(c,a);
-  }
-
-  private Step _then= null;
-  private Step _else= null;
-
-  public IfStep withElse(Step n ) {
-    _else=n;
-    return this;
-  }
-
-  public IfStep withThen(Step n ) {
-    _then=n;
-    return this;
-  }
-
-  public Step handle(Job j) {
-    boolean b = test(j);
-    //TLOG.debug("If: test {}", (b) ? "OK" : "FALSE");
-    Step rc = b ? _then : _else;
-    realize();
-    return rc;
-  }
-
-}
-
-
 

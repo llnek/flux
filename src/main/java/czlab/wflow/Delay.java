@@ -18,75 +18,11 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public class Delay extends Activity {
+public interface Delay extends TaskDef {
 
-  public static Delay apply(String name, long delay) {
-    return new Delay(name, delay);
-  }
-
-  public static Delay apply(long delay) {
-    return apply("", delay);
-  }
-
-  public Delay(String name, long delay) {
-    super(name);
-    _delayMillis = delay;
-  }
-
-  public Delay(long delay) {
-    this("", delay);
-  }
-
-  public Delay(String name) {
-    this(name,0L);
-  }
-
-  public Delay() {
-    this("", 0L);
-  }
-
-  public Step createStep(Step cur) {
-    return new DelayStep(cur,this);
-  }
-
-  public Step realize(Step me) {
-    DelayStep p= (DelayStep) me;
-    p.withDelay(_delayMillis);
-    return me;
-  }
-
-  public long delayMillis() {
-    return _delayMillis;
-  }
-
-  private long _delayMillis;
+  /**/
+  public long delayMillis();
 
 }
-
-
-/**
- *
- * @author Kenneth Leung
- *
- */
-class DelayStep extends Step {
-
-  public long delayMillis() { return _delayMillis; }
-  public Step handle(Job j) { return this; }
-
-  public DelayStep(Step c, Delay a) {
-    super(c,a);
-  }
-
-  public Step withDelay(long millis) {
-    _delayMillis=millis;
-    return this;
-  }
-
-  private long _delayMillis= 0L;
-}
-
-
-
 
 
