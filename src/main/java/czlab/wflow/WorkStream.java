@@ -22,8 +22,10 @@ package czlab.wflow;
  */
 public interface WorkStream {
 
+  /**/
   public TaskDef onError(Throwable e);
 
+  /**/
   public TaskDef startWith();
 
 }

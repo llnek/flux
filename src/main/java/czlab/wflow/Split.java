@@ -19,7 +19,9 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface Split extends Composite {
+public interface Split extends TaskDef {
 
 }
+
+
 

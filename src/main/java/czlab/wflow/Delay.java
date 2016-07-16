@@ -20,9 +20,6 @@ package czlab.wflow;
  */
 public interface Delay extends TaskDef {
 
-  /**/
-  public long delayMillis();
-
 }
 
 

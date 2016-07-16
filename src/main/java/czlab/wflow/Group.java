@@ -20,7 +20,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface Group extends Composite {
+public interface Group extends TaskDef {
 }
 
 

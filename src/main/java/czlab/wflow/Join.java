@@ -18,16 +18,9 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface class Merge  extends TaskDef {
-
-  /**/
-  public boolean hasInnerBody();
-
-  /**/
-  public int countBranches();
-
-  /**/
-  public TaskDef innerBody();
+public interface Join extends TaskDef {
 
 }
+
+
 

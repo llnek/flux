@@ -12,8 +12,9 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlab.wflow;
+
+
 
 /**
  * @author Kenneth Leung
@@ -23,23 +24,28 @@ public class StepError extends Exception {
   private static final long serialVersionUID = 1L;
   private Step _step;
 
+  /**/
   public StepError(Step n, String msg, Throwable e) {
     super(msg,e);
     _step=n;
   }
 
+  /**/
   public StepError(String msg,Throwable e) {
     this(null, msg,e);
   }
 
+  /**/
   public StepError(Throwable e) {
     this(null,"", e);
   }
 
+  /**/
   public StepError(String msg) {
     this(null, msg,null);
   }
 
+  /**/
   public Step lastStep() { return _step; }
 
 }

@@ -26,19 +26,27 @@ import czlab.xlib.Settable;
  */
 public interface Job extends Gettable , Settable, Identifiable, Debuggable {
 
+  /**/
   public void setLastResult(Object v) ;
 
+  /**/
   public void clrLastResult() ;
 
+  /**/
   public Object getLastResult() ;
 
+  /**/
   public ServerLike container();
 
+  /**/
   public void clear();
 
+  /**/
   public Event event() ;
 
+  /**/
   public WorkStream wflow();
+
 }
 
 

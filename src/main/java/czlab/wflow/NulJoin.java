@@ -19,7 +19,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface NulJoin extends Merge {
+public interface NulJoin extends Join {
 
 }
 

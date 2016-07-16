@@ -19,7 +19,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface While extends Conditional {
+public interface While extends TaskDef {
 
 }
 

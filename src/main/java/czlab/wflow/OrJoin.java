@@ -19,7 +19,8 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface Or extends Merge {
+public interface OrJoin extends Join {
 
 }
+
 

@@ -28,10 +28,11 @@ public interface TaskDef extends Named {
    * Instantiate a *runtime* version of this work unit as it becomes
    * part of the Workflow.
    *
-   * @param cur current step.
+   * @param nxt next step.
    * @return a *runtime* version of this TaskDef.
    */
-  public Step create(Step cur);
+  public Step create(Step nxt);
+
 
   /**/
   public Step create(Job j);

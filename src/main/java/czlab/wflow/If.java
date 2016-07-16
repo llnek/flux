@@ -18,7 +18,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface If extends Conditional {
+public interface If extends TaskDef {
 
 }
 
