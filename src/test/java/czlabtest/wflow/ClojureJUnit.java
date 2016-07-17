@@ -12,20 +12,22 @@
  *
  * Copyright (c) 2013-2016, Kenneth Leung. All rights reserved. */
 
-
 package czlabtest.wflow;
 
 import mikera.cljunit.ClojureTest;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * @author kenl
+ */
 public class ClojureJUnit extends ClojureTest {
-    @Override
-    public List<String> namespaces() {
-        return Arrays.asList(new String[]{
-
-        });
-    }
+  @Override
+  public List<String> namespaces() {
+    return Arrays.asList(new String[] {
+      "czlabtest.wflow.test"
+    });
+  }
 }
 
 

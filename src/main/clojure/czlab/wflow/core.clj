@@ -52,6 +52,7 @@
      StepError
      BoolExpr
      ChoiceExpr
+     WorkStream
      CounterExpr]
     [czlab.xlib
      Initable
@@ -920,6 +921,71 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmacro chain-> "" ^Group [a & xs] `(group ~a ~@xs))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn createJob
+
+  ""
+  [^ServerLike server ^WorkStream wflow & [^Event evt]]
+
+  (let [jslast (keyword Job/JS_LAST)
+        data (atom {})
+        jid (CU/nextSeqLong)]
+    (reify
+
+      Job
+
+      (getv [_ k]
+        (when (some? k) (get @data k)))
+
+      (setv [_ k v]
+        (when (some? k)
+          (swap! data assoc k v)))
+
+      (unsetv [_ k]
+        (when (some? k)
+          (swap! data dissoc k)))
+
+      (clear [_]
+        (reset! data {}))
+
+      (container [_] server)
+
+      (event [_] evt)
+
+      (id [_] jid)
+
+      (setLastResult [_ v]
+        (swap! data assoc jslast v))
+
+      (clrLastResult [_]
+        (swap! data dissoc jslast))
+
+      (getLastResult [_] (get @data jslast))
+
+      (wstream [_] wflow)
+
+      (dbgShow [_ out] )
+
+      (dbgStr [_] ""))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn workStream
+
+  ""
+  [^TaskDef startTask]
+
+  (reify
+
+    WorkStream
+
+    (onError [_ e] nil)
+
+    (startWith [_] startTask)))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;EOF

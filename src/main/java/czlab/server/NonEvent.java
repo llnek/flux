@@ -21,10 +21,10 @@ package czlab.server;
  */
 public class NonEvent implements Event {
 
-  public NonEvent() {
+  private void init(final ServerLike s) {
     _emit=new EventEmitter(){
           public void dispatch(Event evt, Object options) {}
-          public ServerLike container() {return null;}
+          public ServerLike container() {return s;}
           public Object getConfig() {return null;}
           public boolean isEnabled() {return true;}
           public boolean isActive() {return true;}
@@ -36,8 +36,13 @@ public class NonEvent implements Event {
   }
 
   public NonEvent(ServerLike s) {
-    this();
+    init(s);
   }
+
+  public NonEvent() {
+    this(null);
+  }
+
 
   @Override
   public Object id() {
