@@ -23,7 +23,7 @@ package czlab.wflow;
  */
 public interface For extends While {
   /**/
-  public static final String JS_INDEX = "__forloop_index__";
+  public static final String FLOOP_INDEX = "__forloop_index__";
 }
 
 

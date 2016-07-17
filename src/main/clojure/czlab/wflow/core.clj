@@ -21,7 +21,8 @@
     [czlab.xlib.str :refer [stror hgl?]]
     [czlab.xlib.logging :as log]
     [czlab.xlib.core
-     :refer [do->nil
+     :refer [do->true
+             do->nil
              inst?
              cast?]]
     [clojure.java.io :as io]
@@ -36,6 +37,7 @@
      Delay
      Job
      Group
+     For
      If
      While
      PTask
@@ -638,9 +640,9 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defn- stepizeLoop
 
-  While
+  ""
   [^TaskDef actDef ^Step nxtStep & xs]
   {:pre [(some? nxtStep)]}
 
@@ -695,6 +697,15 @@
                     (-> (assoc (:vars @info) :body n)
                         (swap! info assoc :vars ))))))
             @rc))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod stepize
+
+  While
+  [^TaskDef actDef ^Step nxtStep & xs]
+
+  (apply stepizeLoop actDef nxtStep xs))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -854,6 +865,57 @@
 
       (create [this c] (stepize this c))
       (getName [_] "group"))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- floopExpr
+
+  ""
+  ^BoolExpr
+  [cnt]
+
+  (let [_loop (atom 0)]
+    (reify BoolExpr
+      (ptest [_ j]
+        (let [v @_loop]
+          (if (< v cnt)
+            (do->true
+              (.setv ^Job j For/FLOOP_INDEX v)
+              (swap! _loop inc))
+            false))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmethod stepize
+
+  For
+  [^TaskDef actDef ^Step nxtStep & xs]
+
+  (apply stepizeLoop actDef nxtStep xs))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn floop
+
+  "Create a For Task"
+  ^For
+  [^CounterExpr cexpr ^TaskDef body]
+
+  (reify
+
+    Initable
+
+    (init [_ p]
+      (let [j (.job ^Step p)
+            n (.gcount cexpr j)]
+        (->> {:bexpr (floop n)
+              :body (.create body ^Step p)}
+             (.init ^Initable p))))
+
+    For
+
+    (create [this c] (stepize this c))
+    (getName [_] "for")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
