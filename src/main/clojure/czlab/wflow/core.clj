@@ -15,13 +15,14 @@
 (ns ^{:doc "A Minimal worflow framework."
       :author "Kenneth Leung"}
 
-  czlab.wflow
+  czlab.wflow.core
 
   (:require
     [czlab.xlib.str :refer [stror hgl?]]
     [czlab.xlib.logging :as log]
     [czlab.xlib.core
-     :refer [inst?
+     :refer [do->nil
+             inst?
              cast?]]
     [clojure.java.io :as io]
     [clojure.string :as cs])
@@ -63,13 +64,12 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro reinit!
+(defn- reinit!
 
   ""
-  {:private true}
   [^Initable a ^Step s]
 
-  `(.init ~a ~s))
+  (.init a  s))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -86,14 +86,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro gjob
+(defn- gjob
 
   ""
   ^Job
-  [s j]
+  [^Step s ^Job j]
 
-  `(let [n# (.next ^Step ~s)]
-    (or (some-> n# (.job n#)) ~j)))
+  (or (some-> s (.next ) (.job )) j))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -139,9 +138,9 @@
                          (.handleError svc))]
             (var-set err (cast? TaskDef ret))))
         (when (nil? @err) (var-set err (nihil)))
-        (var-set rc (.reify ^TaskDef
+        (var-set rc (.create ^TaskDef
                             @err
-                            (.create (nihil) j))))))
+                            (.create ^Nihil (nihil) j))))))
     (if (nil? @rc)
       (log/debug "step: rc==null => skip")
       (stepRunAfter @rc))))
@@ -161,7 +160,7 @@
 (defmethod stepize
 
   Nihil
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & [^Job _job]]
 
   (let [pid (CU/nextSeqLong)]
     (reify
@@ -172,11 +171,11 @@
 
       Step
 
-      (job [this] (gjob this _job))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (handle [this j] this)
       (setNext [_ n] )
+      (job [this] _job)
       (proto [_] actDef)
       (attrs [_] nil)
       (id [_] pid)
@@ -198,16 +197,17 @@
 
     Nihil
 
-    (create [this c] (stepize this c))
+    (create [this c] (stepize this nil (.job c)))
     (getName [_] "nihil")
-    (create [this j] (stepize this nil j))))
+    (createEx [this j] (stepize this nil j))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   Delay
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -220,7 +220,10 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (handle [this j]
@@ -228,7 +231,6 @@
         this)
       (attrs [_] (:vars @info))
       (id [_] pid)
-      (job [this] (gjob this _job))
       (proto [_] actDef)
       (next [_] (:next @info)))))
 
@@ -252,15 +254,15 @@
     Delay
 
     (create [this c] (stepize this c))
-    (getName [_] "delay")
-    (create [this j] (stepize this j))))
+    (getName [_] "delay")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   PTask
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -273,8 +275,10 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
-      (job [this] (gjob this _job))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (attrs [_] (:vars @info))
@@ -284,12 +288,12 @@
       (handle [this j]
         (let [a (-> (get-in @info [:vars :work])
                     (apply this j []))
-              rc (.next this)]
+              nx (.next this)]
           (reinit! actDef this)
           (if
             (inst? TaskDef a)
-            (.create ^TaskDef a rc)
-            rc))))))
+            (.create ^TaskDef a nx)
+            nx))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -311,15 +315,15 @@
     PTask
 
     (create [this c] (stepize this c))
-    (getName [_] (stror nm "ptask"))
-    (create [this j] (stepize this j))))
+    (getName [_] (stror nm "ptask"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   Switch
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -332,18 +336,20 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
-      (job [this] (gjob this _job))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (next [_] (:next @info))
       (attrs [_] (:vars @info))
       (id [_] pid)
       (proto [_] actDef)
-      (handle [_ j]
+      (handle [this j]
         (let [cs (get-in @info [:vars :choices])
               dft (get-in @info [:vars :dft])
-              e (get-in @info [:vars :expr])
+              e (get-in @info [:vars :cexpr])
               m (.choice ^ChoiceExpr e ^Job j)
               a (if (some? m)
                   (some #(if (= m (first %1))
@@ -367,23 +373,23 @@
       Initable
 
       (init [_ s]
-        (->> {:expr cexpr
+        (->> {:cexpr cexpr
               :dft dft
               :choices cpairs}
-             (.init ^Step s)))
+             (.init ^Initable s)))
 
       Switch
 
       (create [this c] (stepize this c))
-      (getName [_] "switch")
-      (create [this j] (stepize this j)))))
+      (getName [_] "switch"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   NulJoin
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -395,15 +401,17 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (attrs [_] (:vars @info))
       (next [_] (:next @info))
       (id [_] pid)
       (proto [_] actDef)
-      (job [this] (gjob this _job))
-      (handle [_ j] nil))))
+      (handle [this j] (.next this))))) ;; nil?
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -422,15 +430,15 @@
     NulJoin
 
     (create [this c] (stepize this c))
-    (getName [_] "nuljoin")
-    (create [this c] (stepize this j))))
+    (getName [_] "nuljoin")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   AndJoin
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -443,8 +451,10 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
-      (job [this] (gjob this _job))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (attrs [_] (:vars @info))
@@ -468,7 +478,7 @@
 
   "Create a And Join Task"
   ^AndJoin
-  [^long branches & [^TaskDef body]]
+  [branches & [^TaskDef body]]
 
   (reify
 
@@ -476,24 +486,24 @@
 
     (init [_ s]
       (let [x (.next ^Step s)
-            b (if (some? body) (.reify body x) nil)]
+            b (if (some? body) (.create body x) nil)]
         (->> {:cnt (AtomicInteger. 0)
               :branches branches
               :body b}
-           (.init ^Step s))))
+           (.init ^Initable s))))
 
     AndJoin
 
     (create [this c] (stepize this c))
-    (getName [_] "andjoin")
-    (create [this j] (stepize this j))))
+    (getName [_] "andjoin")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   OrJoin
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -506,10 +516,12 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
-      (job [this] (gjob this _job))
       (attrs [_] (:vars @info))
       (next [_] (:next @info))
       (proto [_] actDef)
@@ -543,7 +555,7 @@
 
   "Create a Or Join Task"
   ^OrJoin
-  [^long branches & [^TaskDef body]]
+  [branches & [^TaskDef body]]
 
   (reify
 
@@ -551,7 +563,7 @@
 
     (init [_ s]
       (let [x (.next ^Step s)
-            b (if (some? body) (.reify body x) nil)]
+            b (if (some? body) (.create body x) nil)]
         (->> {:cnt (AtomicInteger. 0)
               :branches branches
               :body b}
@@ -560,15 +572,15 @@
     OrJoin
 
     (create [this c] (stepize this c))
-    (getName [_] "orjoin")
-    (create [this j] (stepize this j))))
+    (getName [_] "orjoin")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   If
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -581,13 +593,15 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (next [_] (:next @info))
       (attrs [_] (:vars @info))
       (proto [_] actDef)
-      (job [this] (gjob this _job))
       (handle [this j]
         (let [p (get-in @info [:vars :test])
               t (get-in @info [:vars :then])
@@ -610,8 +624,8 @@
 
     (init [this s]
       (let [nx (.next ^Step s)
-            e (if (some? else) (.reify else nx) nil)
-            t (.reify then nx)]
+            e (if (some? else) (.create else nx) nil)
+            t (.create then nx)]
         (->> {:test bexpr
               :then t
               :else e}
@@ -620,15 +634,15 @@
     If
 
     (create [this c] (stepize this c))
-    (getName [_] "if")
-    (create [this c] (stepize this j))))
+    (getName [_] "if")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   While
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -641,14 +655,16 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (next [_] (:next @info))
       (attrs [_] (:vars @info))
       (proto [_] actDef)
       (id [_] pid)
-      (job [this] (gjob this _job))
       (handle [this j]
         (with-local-vars [rc this]
           (let [p (get-in @info [:vars :bexpr])
@@ -687,29 +703,28 @@
   "Create a While Task"
   ^While
   [^BoolExpr bexpr ^TaskDef body]
-  {:pre [(some? body)]}
 
   (reify
 
     Initable
 
     (init [this s]
-      (->> {:test bexpr
+      (->> {:bexpr bexpr
             :body (.create body ^Step s)}
            (.init ^Initable s)))
 
     While
 
     (create [this c] (stepize this c))
-    (getName [_] "while")
-    (create [this c] (stepize this j))))
+    (getName [_] "while")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   Split
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -722,14 +737,16 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (next [_] (:next @info))
       (attrs [_] (:vars @info))
       (proto [_] actDef)
       (id [_] pid)
-      (job [this] (gjob this _job))
       (handle [this j]
         (let [t (get-in @info [:vars :joinStyle])
               ^Innards
@@ -741,7 +758,7 @@
             (.run cpu (.next cs)))
           (reinit! actDef this)
           (if (or (= :and t) (= :or t))
-            (.next ^Step this)
+            (.next this)
             nil))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -753,6 +770,8 @@
   [merger ^TaskDef body & branches]
 
   (let [cnt (count branches)
+        bs (into [] branches)
+        ^TaskDef
         join (cond
                (= :and merger) (andjoin cnt body)
                (= :or merger) (orjoin cnt body)
@@ -763,23 +782,23 @@
 
       (init [this p]
         (let [nx (.next ^Step p)
-              s (.reify join nx)]
-          (->> {:forks (Innards. s branches)
+              s (.create join nx)]
+          (->> {:forks (Innards. s bs)
                 :joinStyle merger}
                (.init ^Initable s))))
 
       Split
 
       (create [this c] (stepize this c))
-      (getName [_] "fork")
-      (create [this j] (stepize this j)))))
+      (getName [_] "fork"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   Group
-  [^TaskDef actDef ^Step nxtStep & [_job]]
+  [^TaskDef actDef ^Step nxtStep & xs]
+  {:pre [(some? nxtStep)]}
 
   (let [info (atom {:next nxtStep
                     :vars {}})
@@ -792,10 +811,12 @@
 
       Step
 
-      (setNext [_ n] (swap! info assoc :next n))
+      (job [this] (.job (.next this)))
+      (setNext [_ n]
+        (assert (some? n))
+        (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
-      (job [this] (gjob this _job))
       (next [_] (:next @info))
       (id [_] pid)
       (attrs [_] (:vars @info))
@@ -803,7 +824,7 @@
       (handle [this j]
         (let [^Innards
               cs (get-in @info [:vars :list])
-              nx (.next ^Step this)]
+              nx (.next this)]
           (if-not (.isEmpty cs)
             (let [n (.next cs)
                   d (.proto n)]
@@ -820,7 +841,7 @@
   ^Group
   [^TaskDef a & xs]
 
-  (let [cs (concat [a] xs)]
+  (let [cs (into [] (concat [a] xs))]
     (reify
 
       Initable
@@ -832,25 +853,14 @@
       Group
 
       (create [this c] (stepize this c))
-      (getName [_] "group")
-      (create [this j] (stepize this j)))))
+      (getName [_] "group"))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro chain->
-
-  ""
-  ^Group
-  [a & xs]
-
-  `(group ~a ~@xs))
+(defmacro chain-> "" ^Group [a & xs] `(group ~a ~@xs))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-
-
-
-
+;;EOF
 
 
 

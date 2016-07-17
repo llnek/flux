@@ -23,10 +23,10 @@ import czlab.xlib.RunnableWithId;
 public interface Step extends RunnableWithId {
 
   /**/
-  public Step handle(Job j);
+  public void setNext(Step n);
 
   /**/
-  public setNext(Step n);
+  public Step handle(Job j);
 
   /**/
   public TaskDef proto();

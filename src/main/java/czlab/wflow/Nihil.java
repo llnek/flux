@@ -22,6 +22,9 @@ package czlab.wflow;
  */
 public interface Nihil extends TaskDef {
 
+  /**/
+  public Step createEx(Job j);
+
 }
 
 

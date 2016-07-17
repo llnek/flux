@@ -34,9 +34,6 @@ public interface TaskDef extends Named {
   public Step create(Step nxt);
 
 
-  /**/
-  public Step create(Job j);
-
 }
 
 

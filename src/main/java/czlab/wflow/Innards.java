@@ -46,7 +46,7 @@ public class Innards {
   /**/
   public Step next() {
     return _acts.size() > 0
-      ? _acts.remove(0).reify(_outer) : null;
+      ? _acts.remove(0).create(_outer) : null;
   }
 
   /**/
