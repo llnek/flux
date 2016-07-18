@@ -17,8 +17,14 @@ package czlab.wflow;
 /**
  * @author Kenneth Leung
  */
-@FunctionalInterface public interface CounterExpr {
-  public int gcount(Job job);
+public interface RangeExpr {
+
+  /**/
+  public int lower(Job job);
+
+  /**/
+  public int upper(Job job);
+
 }
 
 

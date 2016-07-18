@@ -22,204 +22,236 @@
         [clojure.test])
 
   (:import
-            [czlab.xlib CU])
+    [czlab.server ServerLike]
+    [czlab.wflow
+     Job
+     BoolExpr
+     RangeExpr
+     ChoiceExpr]
+    [czlab.xlib Activable Schedulable CU]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(def ^:private ^Schedulable SCD (mkScheduler "test"))
-(.activate SCD {})
-
-(def ^:private ^ServerLike
-  SVR (reify ServerLike (core [_] SCD)))
+(defn- mksvr
+  ""
+  ^ServerLike
+  []
+  (let [_c (mkScheduler "test")]
+    (.activate _c {})
+    (reify ServerLike (core [_] _c))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- testWFlowSplit
+(defn- testWFlowSplit->And
+  "should return 10"
+  []
+  (let [ws
+        (workStream->
+          (fork :and
+                (ptask #(do->nil
+                          (safeWait 1000)
+                          (.setv ^Job %2 :x 5)))
+                (ptask #(do->nil
+                          (safeWait 1500)
+                          (.setv ^Job %2 :y 5))))
+          (ptask #(do->nil
+                    (->> (+ (.getv ^Job %2 :x)
+                            (.getv ^Job %2 :y))
+                         (.setv ^Job %2 :z )))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (safeWait 2500)
+    (.deactivate (.core svr))
+    (.getv job :z)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- testWFlowSplit->Or
+  "should return 10"
+  []
+
+  (let [ws
+        (workStream->
+          (fork :or
+                (ptask #(do->nil
+                          (safeWait 1000)
+                          (.setv ^Job %2 :a 10)))
+                (ptask #(do->nil
+                          (safeWait 5000)
+                          (.setv ^Job %2 :b 5))))
+          (ptask #(do->nil
+                    (assert (.contains ^Job %2 :a)))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (safeWait 2500)
+    (.deactivate (.core svr))
+    (.getv job :a)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- testWFlowIf->true
+  "should return 10"
+  []
+  (let [ws
+        (workStream->
+          (ternary
+            (reify BoolExpr (ptest [_ j] false))
+            (ptask #(do->nil
+                      (.setv ^Job %2 :a 10)))
+            (ptask #(do->nil
+                      (.setv ^Job %2 :a 5)))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (safeWait 1500)
+    (.deactivate (.core svr))
+    (.getv job :a)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- testWFlowIf->false
+  "should return 10"
+  []
+  (let [ws
+        (workStream->
+          (ternary
+            (reify BoolExpr (ptest [_ j] false))
+            (ptask #(do->nil
+                      (.setv ^Job %2 :a 5)))
+            (ptask #(do->nil
+                      (.setv ^Job %2 :a 10)))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (safeWait 1500)
+    (.deactivate (.core svr))
+    (.getv job :a)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- testWFlowSwitch->found
   ""
   []
-  (let [out (AtomicInteger. 0)
-        testValue 10
-        f
-        (fork :and
-              (ptask #(do (.set out 10) %1 %2 nil))
-              (ptask #(do (safeWait 1000) %1 %2 nil))
-              (ptask #(do (safeWait 1500) %1 %2 nil)))
-        ws (workStream f)
-        job (createJob SVR ws)
-        end (.create (nihil) job)]
-    (.run (.core SVR)
+
+  (let [ws
+        (workStream->
+          (choice
+            (reify ChoiceExpr (choose [_ j] "z"))
+            nil
+            "y" (ptask #(do->nil %1 %2 ))
+            "z" (ptask #(do->nil
+                          (.setv ^Job %2 :z 10)))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.run (.core svr)
           (.create (.startWith ws) end))
-    pause(5000);
-    assertEquals(testValue, out.get());
+    (.deactivate (.core svr))
+    (.getv job :z)))
 
-    a=PTask.apply( (Step n, Job j) -> {
-      out.set(10);
-      //System.out.println("All Right! " + System.currentTimeMillis());
-      return null;
-    });
-    b=PTask.apply( (Step n, Job j) -> {
-      //System.out.println("Dude! " + System.currentTimeMillis());
-      try { Thread.sleep(1000);  } catch (Exception e) {}
-      return null;
-    });
-    c=PTask.apply( (Step n, Job j) -> {
-      //System.out.println("Yo! " + System.currentTimeMillis());
-      try { Thread.sleep(1500);  } catch (Exception e) {}
-      return null;
-    });
-    a=Split.applyOr(a).includeMany(b,c);
-    s.handle(a, null);
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- testWFlowSwitch->default
+  ""
+  []
 
-    pause(5000);
-    assertEquals(testValue, out.get());
+  (let [ws
+        (workStream->
+          (choice
+            (reify ChoiceExpr (choose [_ j] "z"))
+            (ptask #(do->nil
+                          (.setv ^Job %2 :z 10)))
+            "x" (ptask #(do->nil %1 %2 ))
+            "y" (ptask #(do->nil %1 %2 ))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (.deactivate (.core svr))
+    (.getv job :z)))
 
 
-    a=PTask.apply( (Step n, Job j) -> {
-      out.set(10);
-      //System.out.println("****All Right! " + System.currentTimeMillis());
-      return null;
-    });
-    b=PTask.apply( (Step n, Job j) -> {
-      //System.out.println("Dude! " + System.currentTimeMillis());
-      //try { Thread.sleep(2000);  } catch (Exception e) {}
-      return null;
-    });
-    c=PTask.apply( (Step n, Job j) -> {
-     // System.out.println("Yo! " + System.currentTimeMillis());
-      //try { Thread.sleep(3000);  } catch (Exception e) {}
-      return null;
-    });
-    a=Split.apply().includeMany(b,c).chain(a);
-    s.handle(a, null);
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- testWFlowFor
+  "should return 10"
+  []
 
-    pause(5000);
-    assertEquals(testValue, out.get());
-  }
+  (let [ws
+        (workStream->
+          (floop
+            (reify RangeExpr
+              (lower [_ j] 0)
+              (upper [_ j] 10))
+            (ptask #(do->nil
+                      (->>
+                        (inc (.getv ^Job %2 :z))
+                        (.setv ^Job %2 :z ))))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.setv job :z 0)
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (.deactivate (.core svr))
+    (.getv job :z)))
 
-  @Test
-  public void testWFlowIf() throws Exception {
-    WFlowServer s= new WFlowServer(ServerCore.apply());
-    s.start();
-    AtomicInteger out= new AtomicInteger(0);
-    int testValue=10;
-    Activity a;
-    Activity t= new PTask( (Step n, Job j)-> {
-      out.set(10);
-      return null;
-    });
-    Activity e= new PTask( (Step n, Job j)-> {
-      out.set(20);
-      return null;
-    });
-    a= If.apply( (Job j) -> {
-      return true;
-    }, t,e);
-    s.handle(a,  null);
-    pause(1500);
-    assertEquals(testValue, out.get());
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- testWFlowWhile
+  "should return 10"
+  []
 
-    testValue=20;
-    t= new PTask( (Step n, Job j)-> {
-      out.set(10);
-      return null;
-    });
-    e= new PTask( (Step n, Job j)-> {
-      out.set(20);
-      return null;
-    });
-    a= If.apply( (Job j) -> {
-      return false;
-    }, t,e);
-    s.handle(a,  null);
-    pause(1500);
-    assertEquals(testValue, out.get());
-
-  }
-
-  @Test
-  public void testWFlowSwitch() throws Exception {
-    WFlowServer s= new WFlowServer(ServerCore.apply());
-    s.start();
-    AtomicInteger out= new AtomicInteger(0);
-    final int testValue=10;
-    Activity a=null;
-    a= PTask.apply( (Step cur, Job j) -> {
-        out.set(10);
-        return null;
-    });
-    Activity dummy= new PTask( (Step n, Job j)-> {
-      return null;
-    });
-    a=Switch.apply((Job j) -> {
-      return "bonjour";
-    }).withChoice("hello", dummy)
-    .withChoice("goodbye", dummy)
-    .withChoice("bonjour", a);
-    s.handle(a,null);
-    pause(1500);
-    assertEquals(testValue, out.get());
-
-    a=Switch.apply((Job j) -> {
-      return "bonjour";
-    }).withChoice("hello", dummy)
-    .withChoice("goodbye", dummy)
-    .withDft(a);
-    s.handle(a,null);
-    pause(1500);
-    assertEquals(testValue, out.get());
-
-  }
-
-  @Test
-  public void testWFlowFor() throws Exception {
-    WFlowServer s= new WFlowServer(ServerCore.apply());
-    s.start();
-    AtomicInteger out= new AtomicInteger(0);
-    final int testValue=10;
-    Activity a=null;
-    a= PTask.apply( (Step cur, Job j) -> {
-        //System.out.println("index = " + j.getv(For.JS_INDEX));
-        out.incrementAndGet();
-        return null;
-    });
-    a=For.apply( (Job j) -> { return testValue; }, a);
-    s.handle(a,null);
-    pause(1500);
-    assertEquals(testValue, out.get());
-  }
-
-  @Test
-  public void testWFlowWhile() throws Exception {
-    WFlowServer s= new WFlowServer(ServerCore.apply());
-    s.start();
-    AtomicInteger out= new AtomicInteger(0);
-    final int testValue=10;
-    Activity a=null;
-    a= PTask.apply( (Step cur, Job j) -> {
-        int v= (int) j.getv("count");
-        j.setv("count", (v+1));
-        out.getAndIncrement();
-        System.out.println("count = " + v);
-        return null;
-    });
-    a=While.apply( (Job j) -> {
-      Object v= j.getv("count");
-      if (v==null) {
-        j.setv("count", 0);
-      }
-      return (int)j.getv("count") < testValue;
-    }, a);
-    s.handle(a,null);
-    pause(1500);
-    assertEquals(testValue, out.get());
-  }
-
+  (let [ws
+        (workStream->
+          (wloop
+            (reify BoolExpr
+              (ptest [_ j]
+                (< (.getv ^Job j :cnt) 10)))
+            (ptask #(do->nil
+                      (->>
+                        (inc (.getv ^Job %2 :cnt))
+                        (.setv ^Job %2 :cnt))))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.setv job :cnt 0)
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (.deactivate (.core svr))
+    (.getv job :cnt)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (deftest czlabtestwflow-test
 
-  (is (CU/isNichts? CU/NICHTS))
+
+  (is (== 10 (testWFlowSplit->And)))
+  (is (== 10 (testWFlowSplit->Or)))
+
+  (is (== 10 (testWFlowSwitch->default)))
+  (is (== 10 (testWFlowSwitch->found)))
+
+  (is (== 10 (testWFlowIf->false)))
+  (is (== 10 (testWFlowIf->true)))
+
+  (is (== 10 (testWFlowWhile)))
+  (is (== 10 (testWFlowFor)))
+
 
 )
 

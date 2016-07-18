@@ -32,7 +32,7 @@ import java.util.TimerTask;
  *
  */
 @SuppressWarnings({ "rawtypes", "unchecked"})
-public class ServerCore implements Schedulable, Activable {
+public class ServerCore implements Schedulable {
 
   public static ServerCore apply() { return new ServerCore(); }
 
@@ -45,6 +45,7 @@ public class ServerCore implements Schedulable, Activable {
     _id= "ServerCore#" + CU.nextSeqInt();
   }
 
+  @Override
   public void activate(Object options) {
     Properties props= (Properties) options;
     _core = new TCore(_id,
@@ -55,6 +56,7 @@ public class ServerCore implements Schedulable, Activable {
     _core.start();
   }
 
+  @Override
   public void deactivate() {
     _timer.cancel();
     _holdQ.clear();

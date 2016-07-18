@@ -51,9 +51,9 @@
      Step
      StepError
      BoolExpr
+     RangeExpr
      ChoiceExpr
-     WorkStream
-     CounterExpr]
+     WorkStream]
     [czlab.xlib
      Initable
      Named
@@ -143,7 +143,7 @@
         (when (nil? @err) (var-set err (nihil)))
         (var-set rc (.create ^TaskDef
                             @err
-                            (.create ^Nihil (nihil) j))))))
+                            (.createEx ^Nihil (nihil) j))))))
     (if (nil? @rc)
       (log/debug "step: rc==null => skip")
       (stepRunAfter @rc))))
@@ -353,7 +353,7 @@
         (let [cs (get-in @info [:vars :choices])
               dft (get-in @info [:vars :dft])
               e (get-in @info [:vars :cexpr])
-              m (.choice ^ChoiceExpr e ^Job j)
+              m (.choose ^ChoiceExpr e ^Job j)
               a (if (some? m)
                   (some #(if (= m (first %1))
                            (last %1) nil)
@@ -775,8 +775,8 @@
         bs (into [] branches)
         ^TaskDef
         join (cond
-               (= :and merger) (andjoin cnt body)
-               (= :or merger) (orjoin cnt body)
+               (= :and merger) (andjoin cnt)
+               (= :or merger) (orjoin cnt)
                :else (nuljoin))]
     (reify
 
@@ -859,19 +859,21 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- floopExpr
+(defn- rangeExpr
 
   ""
   ^BoolExpr
-  [cnt]
+  []
 
   (let [_loop (atom 0)]
     (reify BoolExpr
       (ptest [_ j]
-        (let [v @_loop]
-          (if (< v cnt)
+        (let [w (.getv ^Job j :lowerRange)
+              u (.getv ^Job j :upperRange)
+              v @_loop]
+          (if (< (+ w v) u)
             (do->true
-              (.setv ^Job j For/FLOOP_INDEX v)
+              (.setv ^Job j For/RANGE_INDEX v)
               (swap! _loop inc))
             false))))))
 
@@ -890,7 +892,7 @@
 
   "Create a For Task"
   ^For
-  [^CounterExpr cexpr ^TaskDef body]
+  [^RangeExpr rexpr ^TaskDef body]
 
   (reify
 
@@ -898,8 +900,11 @@
 
     (init [_ p]
       (let [j (.job ^Step p)
-            n (.gcount cexpr j)]
-        (->> {:bexpr (floop n)
+            w (.lower rexpr j)
+            u (.upper rexpr j)]
+        (.setv j :lowerRange w)
+        (.setv j :upperRange u)
+        (->> {:bexpr (rangeExpr)
               :body (.create body ^Step p)}
              (.init ^Initable p))))
 
@@ -913,6 +918,7 @@
 (defn createJob
 
   ""
+  ^Job
   [^ServerLike server ^WorkStream ws & [^Event evt]]
 
   (let [jslast (keyword Job/JS_LAST)
@@ -921,6 +927,10 @@
     (reify
 
       Job
+
+      (contains [_ k]
+        (when (some? k)
+          (contains? @data k)))
 
       (getv [_ k]
         (when (some? k) (get @data k)))
@@ -958,9 +968,10 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn workstream->
+(defn workStream->
 
   ""
+  ^WorkStream
   [^TaskDef task0 & tasks]
 
   {:pre [(some? task0)]}
@@ -970,7 +981,7 @@
           (persistent!
             (reduce
               #(cond
-                 (map? %2) (var-set opts %1)
+                 (map? %2) (do (var-set opts %2) %1)
                  (fn? %2) (conj! %1 %2)
                  :else %1)
               (transient [])
