@@ -466,13 +466,12 @@
       (id [_] pid)
       (handle [this j]
         (let [b (get-in @info [:vars :branches])
-              y (get-in @info [:vars :body])
               c (get-in @info [:vars :cnt])
               nv (.incrementAndGet ^AtomicInteger c)]
           (if (== nv b)
             (do
               (reinit! actDef this)
-              (or y (.next this)))
+              (.next this))
             nil))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -481,19 +480,16 @@
 
   "Create a And Join Task"
   ^AndJoin
-  [branches & [^TaskDef body]]
+  [branches]
 
   (reify
 
     Initable
 
     (init [_ s]
-      (let [x (.next ^Step s)
-            b (if (some? body) (.create body x) nil)]
-        (->> {:cnt (AtomicInteger. 0)
-              :branches branches
-              :body b}
-           (.init ^Initable s))))
+      (->> {:cnt (AtomicInteger. 0)
+            :branches branches }
+         (.init ^Initable s)))
 
     AndJoin
 
@@ -531,20 +527,17 @@
       (id [_] pid)
       (handle [this j]
         (let [b (get-in @info [:vars :branches])
-              y (get-in @info [:vars :body])
               c (get-in @info [:vars :cnt])
               nv (.incrementAndGet ^AtomicInteger c)
               nx (.next ^Step this)]
           (cond
             (== 0 b)
-            (do
-              (reinit! actDef this)
-              (or y nx))
+            (do (reinit! actDef this) nx)
 
             (== 1 nv)
             (do
-              (when (== 1 b) (reinit! actDef this))
-              (or y nx))
+              (when (== 1 b)
+                (reinit! actDef this)) nx)
 
             (>= nv b)
             (do->nil
@@ -558,19 +551,16 @@
 
   "Create a Or Join Task"
   ^OrJoin
-  [branches & [^TaskDef body]]
+  [branches]
 
   (reify
 
     Initable
 
     (init [_ s]
-      (let [x (.next ^Step s)
-            b (if (some? body) (.create body x) nil)]
-        (->> {:cnt (AtomicInteger. 0)
-              :branches branches
-              :body b}
-             (.init ^Initable s))))
+      (->> {:cnt (AtomicInteger. 0)
+            :branches branches}
+           (.init ^Initable s)))
 
     OrJoin
 
@@ -920,15 +910,10 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro chain-> "" ^Group [a & xs] `(group ~a ~@xs))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defn createJob
 
   ""
-  [^ServerLike server ^WorkStream wflow & [^Event evt]]
+  [^ServerLike server ^WorkStream ws & [^Event evt]]
 
   (let [jslast (keyword Job/JS_LAST)
         data (atom {})
@@ -965,7 +950,7 @@
 
       (getLastResult [_] (get @data jslast))
 
-      (wstream [_] wflow)
+      (wflow [_] ws)
 
       (dbgShow [_ out] )
 
@@ -973,18 +958,31 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn workStream
+(defn workstream->
 
   ""
-  [^TaskDef startTask]
+  [^TaskDef task0 & tasks]
 
-  (reify
+  {:pre [(some? task0)]}
 
-    WorkStream
-
-    (onError [_ e] nil)
-
-    (startWith [_] startTask)))
+  (with-local-vars [opts nil]
+    (let [g
+          (persistent!
+            (reduce
+              #(cond
+                 (map? %2) (var-set opts %1)
+                 (fn? %2) (conj! %1 %2)
+                 :else %1)
+              (transient [])
+              tasks))
+          err (:error @opts)]
+      (reify WorkStream
+        (startWith [_]
+          (if-not (empty? g)
+            (apply group task0 g)
+            task0))
+        (onError [_ e]
+          (when (fn? err) (err e)))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
