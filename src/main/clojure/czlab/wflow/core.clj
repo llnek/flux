@@ -33,7 +33,6 @@
     [java.util.concurrent.atomic AtomicInteger]
     [czlab.server ServerLike ServiceHandler]
     [czlab.wflow
-     Innards
      Switch
      Delay
      Job
@@ -893,7 +892,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -909,12 +909,14 @@
       (proto [_] actDef)
       (handle [this j]
         (let
-          [^Innards
-           cs (get-in @info [:vars :list])
+          [cs (get-in @info [:vars :list])
            nx (.next this)]
-          (if-not (.isEmpty cs)
-            (-> (.next cs)
-                (.handle ^Job j))
+          (if-not (empty? @cs)
+            (let [a (.create ^TaskDef (first @cs) ^Step this)
+                  r (rest @cs)
+                  rc (.handle a ^Job j)]
+              (reset! cs r)
+              rc)
             (do
               (reinit! actDef this)
               nx)))))))
@@ -928,13 +930,13 @@
   [^TaskDef a & xs]
   {:pre [(some? a)]}
 
-  (let [cs (into [] (concat [a] xs))]
+  (let []
     (reify
 
       Initable
 
       (init [_ p]
-        (->> {:list (Innards. p cs)}
+        (->> {:list (atom (concat [a] xs))}
              (.init ^Initable p)))
 
       Group

@@ -233,6 +233,7 @@
     (.run (.core svr)
           (.create (.startWith ws) end))
     (safeWait 2500)
+    (log/debug "JOB = %s" (.dbgStr job))
     (.dispose (.core svr))
     (.getv job :z)))
 
