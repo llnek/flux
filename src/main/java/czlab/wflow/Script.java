@@ -20,7 +20,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface PTask extends TaskDef {
+public interface Script extends TaskDef {
 
 }
 

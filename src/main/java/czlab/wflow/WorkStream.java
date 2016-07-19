@@ -20,10 +20,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  *
  */
-public interface WorkStream {
-
-  /**/
-  public TaskDef onError(Throwable e);
+@FunctionalInterface public interface WorkStream {
 
   /**/
   public TaskDef startWith();

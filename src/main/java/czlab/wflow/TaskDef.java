@@ -14,7 +14,7 @@
 
 package czlab.wflow;
 
-import czlab.xlib.Named;
+import czlab.xlib.Nameable;
 
 /**
  * An TaskDef is the building block of a workflow.
@@ -22,7 +22,7 @@ import czlab.xlib.Named;
  * @author Kenneth Leung
  *
  */
-public interface TaskDef extends Named {
+public interface TaskDef extends Nameable {
 
   /**
    * Instantiate a *runtime* version of this work unit as it becomes

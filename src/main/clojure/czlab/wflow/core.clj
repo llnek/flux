@@ -22,6 +22,7 @@
     [czlab.xlib.logging :as log]
     [czlab.xlib.core
      :refer [do->true
+             doto->>
              do->nil
              inst?
              cast?]]
@@ -40,7 +41,7 @@
      For
      If
      While
-     PTask
+     Script
      Split
      AndJoin
      OrJoin
@@ -55,15 +56,47 @@
      ChoiceExpr
      WorkStream]
     [czlab.xlib
+     Catchable
      Initable
-     Named
+     Nameable
      CU
      Schedulable]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;(set! *warn-on-reflection* true)
 
-(declare nihil)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmulti stepize
+
+  ""
+  {:private true
+   :tag Step}
+
+  (fn [a b & xs] (class a)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn nihil
+
+  "Create a special Terminator Task"
+  ^Nihil
+  []
+
+  (reify
+
+    Initable
+
+    (init [_ m] )
+
+    Nihil
+
+    (create [this c] (stepize this nil (.job c)))
+    (name [_] "nihil")
+    (createEx [this j]
+      (doto->> (stepize this nil j)
+               (.init this )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -76,26 +109,16 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro rerun!
+(defn- rerun!
 
   ""
-  [s]
+  [^Step s]
 
-  `(let [^Step s# ~s]
-    (-> (.job s#)
-        (.container )
-        (.core )
-        (.reschedule s#))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- gjob
-
-  ""
-  ^Job
-  [^Step s ^Job j]
-
-  (or (some-> s (.next ) (.job )) j))
+  (some-> s
+          (.job )
+          (.container )
+          (.core )
+          (.reschedule s)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -104,19 +127,33 @@
   ""
   [^Step this]
 
-  (let [cpu (.core (.container (.job this)))
-        np (.next this)]
-    (cond
-      (inst? Delay (.proto this))
-      (->> (:delay (.attrs this))
-           (* 1000 )
-           (.postpone cpu np))
+  (log/debug "entering stepRunAfter()")
+  (when (some? this)
+    (let [cpu (.core (.container (.job this)))
+          nx (.next this)]
+      (log/debug "step-to-run-next: %s"
+                 (.name ^Nameable (.proto this)))
+      (cond
+        (inst? Delay (.proto this))
+        (->> (:delay (.attrs this))
+             (* 1000 )
+             (.postpone cpu nx))
 
-      (inst? Nihil (.proto this))
-      nil
+        (inst? Nihil (.proto this))
+        nil
 
-      :else
-      (.run cpu this))))
+        :else
+        (.run cpu this)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmacro nihilStep
+
+  ""
+  ^Step
+  [^Job job]
+
+  `(.createEx (nihil) ~job))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -125,38 +162,29 @@
   ""
   [^Step this]
 
-  (with-local-vars [err nil
-                    rc nil svc nil]
-    (let [j (.job this)
-          par (.container j)
-          d (.proto this)]
-      (.dequeue (.core par) this)
-      (try
-        (log/debug "%s :handle()" (.getName ^Named d))
-        (var-set rc (.handle this j))
-      (catch Throwable e#
-        (when-some [^ServiceHandler
-                    svc (cast? ServiceHandler par)]
-          (let [ret (->> (StepError. this e#)
-                         (.handleError svc))]
-            (var-set err (cast? TaskDef ret))))
-        (when (nil? @err) (var-set err (nihil)))
-        (var-set rc (.create ^TaskDef
-                            @err
-                            (.createEx ^Nihil (nihil) j))))))
-    (if (nil? @rc)
-      (log/debug "step: rc==null => skip")
-      (stepRunAfter @rc))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmulti stepize
-
-  ""
-  {:private true
-   :tag Step}
-
-  (fn [a b & xs] (class a)))
+  (log/debug "%s :handle()"
+             (.name ^Nameable (.proto this)))
+  (-> (.core (.container (.job this)))
+      (.dequeue this))
+  (let
+    [job (.job this)
+     ws (.wflow job)
+     rc
+     (try
+       (or (.handle this job)
+           (.next this))
+       (catch Throwable e#
+         (when-some
+           [a
+            (if (inst? Catchable ws)
+              (->> (.catche ^Catchable ws e#)
+                   (cast? TaskDef))
+              nil)]
+           (->> (nihilStep job)
+                (.create ^TaskDef a )))))]
+    (if (nil? rc)
+      (log/debug "step-to-run-next ==null => skip")
+      (stepRunAfter rc))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -183,26 +211,6 @@
       (attrs [_] nil)
       (id [_] pid)
       (next [this] this))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn nihil
-
-  "Create a special Terminator Task"
-  ^Nihil
-  []
-
-  (reify
-
-    Initable
-
-    (init [_ m] )
-
-    Nihil
-
-    (create [this c] (stepize this nil (.job c)))
-    (getName [_] "nihil")
-    (createEx [this j] (stepize this nil j))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -244,7 +252,8 @@
   "Create a Delay Task"
   ^Delay
   [delaySecs]
-  {:pre [(>= delaySecs 0)]}
+  {:pre [(some? delaySecs)
+         (not (neg? delaySecs))]}
 
   (reify
 
@@ -256,14 +265,16 @@
 
     Delay
 
-    (create [this c] (stepize this c))
-    (getName [_] "delay")))
+    (name [_] "delay")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
-  PTask
+  Script
   [^TaskDef actDef ^Step nxtStep & xs]
   {:pre [(some? nxtStep)]}
 
@@ -300,10 +311,10 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn ptask
+(defn script
 
   "Create a Programmable Task"
-  ^PTask
+  ^Script
   [workFunc &[nm]]
   {:pre [(fn? workFunc)]}
 
@@ -315,10 +326,12 @@
       (->> {:work workFunc}
            (.init ^Initable s)))
 
-    PTask
+    Script
 
-    (create [this c] (stepize this c))
-    (getName [_] (stror nm "ptask"))))
+    (name [_] (stror nm "script"))
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -383,8 +396,10 @@
 
       Switch
 
-      (create [this c] (stepize this c))
-      (getName [_] "switch"))))
+      (name [_] "switch")
+      (create [this c]
+        (doto->> (stepize this c)
+                 (.init this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -432,8 +447,10 @@
 
     NulJoin
 
-    (create [this c] (stepize this c))
-    (getName [_] "nuljoin")))
+    (name [_] "nuljoin")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -493,8 +510,10 @@
 
     AndJoin
 
-    (create [this c] (stepize this c))
-    (getName [_] "andjoin")))
+    (name [_] "andjoin")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -564,8 +583,10 @@
 
     OrJoin
 
-    (create [this c] (stepize this c))
-    (getName [_] "orjoin")))
+    (name [_] "orjoin")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -626,8 +647,10 @@
 
     If
 
-    (create [this c] (stepize this c))
-    (getName [_] "if")))
+    (name [_] "if")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -717,8 +740,10 @@
 
     While
 
-    (create [this c] (stepize this c))
-    (getName [_] "while")))
+    (name [_] "while")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -769,15 +794,16 @@
 
   "Create a Split Task"
   ^Split
-  [merger ^TaskDef body & branches]
+  [merger & branches]
 
-  (let [cnt (count branches)
-        bs (into [] branches)
+  (let [bs (into [] branches)
+        cnt (count branches)
         ^TaskDef
         join (cond
                (= :and merger) (andjoin cnt)
                (= :or merger) (orjoin cnt)
                :else (nuljoin))]
+    (log/debug "forking with [%d] branches" cnt)
     (reify
 
       Initable
@@ -787,12 +813,14 @@
               s (.create join nx)]
           (->> {:forks (Innards. s bs)
                 :joinStyle merger}
-               (.init ^Initable s))))
+               (.init ^Initable p))))
 
       Split
 
-      (create [this c] (stepize this c))
-      (getName [_] "fork"))))
+      (name [_] "fork")
+      (create [this c]
+        (doto->> (stepize this c)
+                 (.init this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -827,9 +855,12 @@
         (let [^Innards
               cs (get-in @info [:vars :list])
               nx (.next this)]
+          (log/debug "innards = %s" (some? cs))
+          (log/debug "innardsize = %s" (.size cs))
           (if-not (.isEmpty cs)
             (let [n (.next cs)
                   d (.proto n)]
+              (log/debug "p = %s" (.name ^Nameable (.proto n)))
               (.handle n ^Job j))
             (do
               (reinit! actDef this)
@@ -842,6 +873,7 @@
   "Create a Group Task"
   ^Group
   [^TaskDef a & xs]
+  {:pre [(some? a)]}
 
   (let [cs (into [] (concat [a] xs))]
     (reify
@@ -854,8 +886,10 @@
 
       Group
 
-      (create [this c] (stepize this c))
-      (getName [_] "group"))))
+      (name [_] "group")
+      (create [this c]
+        (doto->> (stepize this c)
+                 (.init this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -910,8 +944,10 @@
 
     For
 
-    (create [this c] (stepize this c))
-    (getName [_] "for")))
+    (name [_] "for")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -980,21 +1016,30 @@
     (let [g
           (persistent!
             (reduce
-              #(cond
-                 (map? %2) (do (var-set opts %2) %1)
-                 (fn? %2) (conj! %1 %2)
-                 :else %1)
+              #(do
+                 (assert (inst? TaskDef %2))
+                 (cond
+                   (map? %2) (do (var-set opts %2) %1)
+                   (inst? TaskDef %2) (conj! %1 %2)
+                   :else %1))
               (transient [])
               tasks))
           err (:error @opts)]
-      (reify WorkStream
-        (startWith [_]
-          (if-not (empty? g)
-            (apply group task0 g)
-            task0))
-        (onError [_ e]
-          (when (fn? err) (err e)))))))
-
+      (if (fn? err)
+        (reify
+          WorkStream
+          (startWith [_]
+            (if-not (empty? g)
+              (apply group task0 g)
+              task0))
+          Catchable
+          (catche [_ e] (err e)))
+        (reify
+          WorkStream
+          (startWith [_]
+            (if-not (empty? g)
+              (apply group task0 g)
+              task0)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;EOF
