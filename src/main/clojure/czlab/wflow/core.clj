@@ -75,7 +75,6 @@
 
   (fn [a b & xs] (class a)))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn nihil
@@ -92,8 +91,11 @@
 
     Nihil
 
-    (create [this c] (stepize this nil (.job c)))
+    (create [this c]
+      (.createEx this (.job c)))
+
     (name [_] "nihil")
+
     (createEx [this j]
       (doto->> (stepize this nil j)
                (.init this )))))
@@ -127,23 +129,16 @@
   ""
   [^Step this]
 
-  ;;(log/debug "entering stepRunAfter()")
-  (when (some? this)
-    (let [cpu (.core (.container (.job this)))
-          nx (.next this)]
-      (log/debug "step-to-run-next===> %s"
+  (if (some? this)
+    (let [cpu (.core (.container (.job this)))]
+      (log/debug "step-to-run-next ==> %s"
                  (.name ^Nameable (.proto this)))
-      (cond
-        (inst? Delay (.proto this))
-        (->> (:delay (.attrs this))
-             (* 1000 )
-             (.postpone cpu nx))
-
+      (if
         (inst? Nihil (.proto this))
-        nil
-
-        :else
-        (.run cpu this)))))
+        (log/debug "nihil => stop or skip")
+        ;;else
+        (.run cpu this)))
+    (log/debug "step-to-run-next ==> null")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -181,9 +176,7 @@
               nil)]
            (->> (nihilStep job)
                 (.create ^TaskDef a )))))]
-    (if (nil? rc)
-      (log/debug "step-to-run-next ==null => skip")
-      (stepRunAfter rc))))
+    (stepRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -226,7 +219,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -237,8 +231,13 @@
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (handle [this j]
-        (reinit! actDef this)
-        this)
+        (let [cpu (.core (.container ^Job j))
+              nx (.next this)]
+          (->> (get-in @info [:vars :delay])
+               (* 1000 )
+               (.postpone cpu nx))
+          (reinit! actDef this)
+          nil))
       (attrs [_] (:vars @info))
       (id [_] pid)
       (proto [_] actDef)
@@ -284,7 +283,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -328,6 +328,7 @@
     Script
 
     (name [_] (stror nm "script"))
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
@@ -347,7 +348,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -362,15 +364,15 @@
       (id [_] pid)
       (proto [_] actDef)
       (handle [this j]
-        (let [cs (get-in @info [:vars :choices])
-              dft (get-in @info [:vars :dft])
-              e (get-in @info [:vars :cexpr])
-              m (.choose ^ChoiceExpr e ^Job j)
-              a (if (some? m)
-                  (some #(if (= m (first %1))
-                           (last %1) nil)
-                        cs)
-                  nil)]
+        (let
+          [cs (get-in @info [:vars :choices])
+           dft (get-in @info [:vars :dft])
+           e (get-in @info [:vars :cexpr])
+           m (.choose ^ChoiceExpr e ^Job j)
+           a (if (some? m)
+               (some #(if
+                        (= m (first %1))
+                        (last %1) nil) cs) nil)]
           (reinit! actDef this)
           (or a dft))))))
 
@@ -399,8 +401,7 @@
                (transient [])
                (partition 2 choices)))
            (partition 2))]
-        (->> {:dft (some-> dft
-                           (.create nx))
+        (->> {:dft (some-> dft (.create nx))
               :cexpr cexpr
               :choices cs}
              (.init ^Initable s))))
@@ -408,6 +409,7 @@
     Switch
 
     (name [_] "switch")
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
@@ -441,8 +443,9 @@
       (id [_] pid)
       (proto [_] actDef)
       (handle [this j]
-        (let [b (get-in @info [:vars :forks])
-              cpu (.core (.container ^Job j))]
+        (let
+          [b (get-in @info [:vars :forks])
+           cpu (.core (.container ^Job j))]
           (if-not (empty? b)
             (do->nil
               (doseq [t (seq b)]
@@ -469,6 +472,7 @@
     NulJoin
 
     (name [_] "nuljoin")
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
@@ -488,7 +492,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -503,15 +508,14 @@
       (proto [_] actDef)
       (id [_] pid)
       (handle [this j]
-        (let [b (get-in @info [:vars :forks])
-              cpu (.core (.container ^Job j))
-              ^AtomicInteger
-              c (get-in @info [:vars :cnt])]
-          (log/debug "inside AND")
+        (let
+          [b (get-in @info [:vars :forks])
+           cpu (.core (.container ^Job j))
+           ^AtomicInteger
+           c (get-in @info [:vars :cnt])]
           (if (number? b)
             (let [nv (.incrementAndGet c)]
-              (log/debug "WTF!!!!!!!!!!!!! %d %d" b nv)
-              (if (== nv (int b))
+              (if (== nv b)
                 (do
                   (reinit! actDef this)
                   (.next this))
@@ -522,10 +526,8 @@
                   (->> (.create ^TaskDef t this)
                        (.run cpu)))
                 (->> (assoc (:vars @info)
-                            :forks
-                            (count b))
-                     (swap! info assoc :vars))
-                (log/debug "AND ret nuill"))
+                            :forks (count b))
+                     (swap! info assoc :vars)))
               (.next this))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -548,6 +550,7 @@
     AndJoin
 
     (name [_] "andjoin")
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
@@ -567,7 +570,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -582,10 +586,11 @@
       (proto [_] actDef)
       (id [_] pid)
       (handle [this j]
-        (let [b (get-in @info [:vars :forks])
-              cpu (.core (.container ^Job j))
-              ^AtomicInteger
-              c (get-in @info [:vars :cnt])]
+        (let
+          [b (get-in @info [:vars :forks])
+           cpu (.core (.container ^Job j))
+           ^AtomicInteger
+           c (get-in @info [:vars :cnt])]
           (if (number? b)
             (let [nv (.incrementAndGet c)
                   nx (.next this)]
@@ -634,6 +639,7 @@
     OrJoin
 
     (name [_] "orjoin")
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
@@ -653,7 +659,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -668,10 +675,11 @@
       (attrs [_] (:vars @info))
       (proto [_] actDef)
       (handle [this j]
-        (let [p (get-in @info [:vars :test])
-              t (get-in @info [:vars :then])
-              e (get-in @info [:vars :else])
-              b (.ptest ^BoolExpr p ^Job j)]
+        (let
+          [p (get-in @info [:vars :test])
+           t (get-in @info [:vars :then])
+           e (get-in @info [:vars :else])
+           b (.ptest ^BoolExpr p ^Job j)]
           (reinit! actDef this)
           (if b t e))))))
 
@@ -688,9 +696,11 @@
     Initable
 
     (init [this s]
-      (let [nx (.next ^Step s)
-            e (if (some? else) (.create else nx) nil)
-            t (.create then nx)]
+      (let
+        [nx (.next ^Step s)
+         e (some-> else
+                   (.create nx))
+         t (.create then nx)]
         (->> {:test bexpr
               :then t
               :else e}
@@ -699,6 +709,7 @@
     If
 
     (name [_] "if")
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
@@ -718,7 +729,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -792,6 +804,7 @@
     While
 
     (name [_] "while")
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
@@ -811,7 +824,8 @@
 
       Initable
 
-      (init [_ m] (swap! info assoc :vars m))
+      (init [_ m]
+        (swap! info assoc :vars m))
 
       Step
 
@@ -826,14 +840,15 @@
       (proto [_] actDef)
       (id [_] pid)
       (handle [this j]
-        (let [t (get-in @info [:vars :joinStyle])
-              cs (get-in @info [:vars :forks])
-              nx (.next this)
-              ^TaskDef jx
-              (cond
-                (= :and t) (andjoin cs)
-                (= :or t) (orjoin cs)
-                :else (nuljoin cs)) ]
+        (let
+          [t (get-in @info [:vars :joinStyle])
+           cs (get-in @info [:vars :forks])
+           nx (.next this)
+           ^TaskDef jx
+           (cond
+             (= :and t) (andjoin cs)
+             (= :or t) (orjoin cs)
+             :else (nuljoin cs)) ]
           (.create jx nx))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -858,6 +873,7 @@
       Split
 
       (name [_] "fork")
+
       (create [this c]
         (doto->> (stepize this c)
                  (.init this))))))
@@ -892,16 +908,13 @@
       (attrs [_] (:vars @info))
       (proto [_] actDef)
       (handle [this j]
-        (let [^Innards
-              cs (get-in @info [:vars :list])
-              nx (.next this)]
-          (log/debug "innards = %s" (some? cs))
-          (log/debug "innardsize = %s" (.size cs))
+        (let
+          [^Innards
+           cs (get-in @info [:vars :list])
+           nx (.next this)]
           (if-not (.isEmpty cs)
-            (let [n (.next cs)
-                  d (.proto n)]
-              (log/debug "p = %s" (.name ^Nameable (.proto n)))
-              (.handle n ^Job j))
+            (-> (.next cs)
+                (.handle ^Job j))
             (do
               (reinit! actDef this)
               nx)))))))
@@ -927,6 +940,7 @@
       Group
 
       (name [_] "group")
+
       (create [this c]
         (doto->> (stepize this c)
                  (.init this))))))
@@ -985,6 +999,7 @@
     For
 
     (name [_] "for")
+
     (create [this c]
       (doto->> (stepize this c)
                (.init this)))))
