@@ -127,11 +127,11 @@
   ""
   [^Step this]
 
-  (log/debug "entering stepRunAfter()")
+  ;;(log/debug "entering stepRunAfter()")
   (when (some? this)
     (let [cpu (.core (.container (.job this)))
           nx (.next this)]
-      (log/debug "step-to-run-next: %s"
+      (log/debug "step-to-run-next===> %s"
                  (.name ^Nameable (.proto this)))
       (cond
         (inst? Delay (.proto this))
@@ -171,8 +171,7 @@
      ws (.wflow job)
      rc
      (try
-       (or (.handle this job)
-           (.next this))
+       (.handle this job)
        (catch Throwable e#
          (when-some
            [a
@@ -383,23 +382,35 @@
   ^Switch
   [^ChoiceExpr cexpr ^TaskDef dft & choices]
 
-  (let [cpairs (partition 2 choices)]
-    (reify
+  (reify
 
-      Initable
+    Initable
 
-      (init [_ s]
-        (->> {:cexpr cexpr
-              :dft dft
-              :choices cpairs}
-             (.init ^Initable s)))
+    (init [_ s]
+      (let
+        [nx (.next ^Step s)
+         cs
+         (->>
+           (persistent!
+             (reduce
+               #(-> (conj! %1 (first %2))
+                    (conj! (.create ^TaskDef
+                                    (last %2) nx)))
+               (transient [])
+               (partition 2 choices)))
+           (partition 2))]
+        (->> {:dft (some-> dft
+                           (.create nx))
+              :cexpr cexpr
+              :choices cs}
+             (.init ^Initable s))))
 
-      Switch
+    Switch
 
-      (name [_] "switch")
-      (create [this c]
-        (doto->> (stepize this c)
-                 (.init this))))))
+    (name [_] "switch")
+    (create [this c]
+      (doto->> (stepize this c)
+               (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -429,7 +440,15 @@
       (next [_] (:next @info))
       (id [_] pid)
       (proto [_] actDef)
-      (handle [this j] (.next this))))) ;; nil?
+      (handle [this j]
+        (let [b (get-in @info [:vars :forks])
+              cpu (.core (.container ^Job j))]
+          (if-not (empty? b)
+            (do->nil
+              (doseq [t (seq b)]
+                (->> (.create ^TaskDef t this)
+                     (.run cpu)))))
+          (.next this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -437,13 +456,15 @@
 
   "Create a do-nothing Join Task"
   ^NulJoin
-  []
+  [branches]
 
   (reify
 
     Initable
 
-    (init [_ s] )
+    (init [_ s]
+      (->> {:forks branches}
+           (.init ^Initable s)))
 
     NulJoin
 
@@ -482,14 +503,30 @@
       (proto [_] actDef)
       (id [_] pid)
       (handle [this j]
-        (let [b (get-in @info [:vars :branches])
-              c (get-in @info [:vars :cnt])
-              nv (.incrementAndGet ^AtomicInteger c)]
-          (if (== nv b)
-            (do
-              (reinit! actDef this)
-              (.next this))
-            nil))))))
+        (let [b (get-in @info [:vars :forks])
+              cpu (.core (.container ^Job j))
+              ^AtomicInteger
+              c (get-in @info [:vars :cnt])]
+          (log/debug "inside AND")
+          (if (number? b)
+            (let [nv (.incrementAndGet c)]
+              (log/debug "WTF!!!!!!!!!!!!! %d %d" b nv)
+              (if (== nv (int b))
+                (do
+                  (reinit! actDef this)
+                  (.next this))
+                nil))
+            (if-not (empty? b)
+              (do->nil
+                (doseq [t (seq b)]
+                  (->> (.create ^TaskDef t this)
+                       (.run cpu)))
+                (->> (assoc (:vars @info)
+                            :forks
+                            (count b))
+                     (swap! info assoc :vars))
+                (log/debug "AND ret nuill"))
+              (.next this))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -505,8 +542,8 @@
 
     (init [_ s]
       (->> {:cnt (AtomicInteger. 0)
-            :branches branches }
-         (.init ^Initable s)))
+            :forks branches}
+           (.init ^Initable s)))
 
     AndJoin
 
@@ -545,24 +582,37 @@
       (proto [_] actDef)
       (id [_] pid)
       (handle [this j]
-        (let [b (get-in @info [:vars :branches])
-              c (get-in @info [:vars :cnt])
-              nv (.incrementAndGet ^AtomicInteger c)
-              nx (.next ^Step this)]
-          (cond
-            (== 0 b)
-            (do (reinit! actDef this) nx)
+        (let [b (get-in @info [:vars :forks])
+              cpu (.core (.container ^Job j))
+              ^AtomicInteger
+              c (get-in @info [:vars :cnt])]
+          (if (number? b)
+            (let [nv (.incrementAndGet c)
+                  nx (.next this)]
+              (cond
+                (== 0 b)
+                (do (reinit! actDef this) nx)
 
-            (== 1 nv)
-            (do
-              (when (== 1 b)
-                (reinit! actDef this)) nx)
+                (== 1 nv)
+                (do
+                  (when (== 1 b)
+                    (reinit! actDef this)) nx)
 
-            (>= nv b)
-            (do->nil
-              (reinit! actDef this))
+                (>= nv b)
+                (do->nil
+                  (reinit! actDef this))
 
-            :else this))))))
+                :else nil))
+            (if-not (empty? b)
+              (do->nil
+                (doseq [t (seq b)]
+                  (->> (.create ^TaskDef t this)
+                       (.run cpu)))
+                (->> (assoc (:vars @info)
+                            :forks
+                            (count b))
+                     (swap! info assoc :vars)))
+              (.next this))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -578,7 +628,7 @@
 
     (init [_ s]
       (->> {:cnt (AtomicInteger. 0)
-            :branches branches}
+            :forks branches}
            (.init ^Initable s)))
 
     OrJoin
@@ -613,6 +663,7 @@
         (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
+      (id [_] pid)
       (next [_] (:next @info))
       (attrs [_] (:vars @info))
       (proto [_] actDef)
@@ -776,17 +827,14 @@
       (id [_] pid)
       (handle [this j]
         (let [t (get-in @info [:vars :joinStyle])
-              ^Innards
               cs (get-in @info [:vars :forks])
-              cpu (-> (.container ^Job j)
-                      (.core))]
-          (while
-            (not (.isEmpty cs))
-            (.run cpu (.next cs)))
-          (reinit! actDef this)
-          (if (or (= :and t) (= :or t))
-            (.next this)
-            nil))))))
+              nx (.next this)
+              ^TaskDef jx
+              (cond
+                (= :and t) (andjoin cs)
+                (= :or t) (orjoin cs)
+                :else (nuljoin cs)) ]
+          (.create jx nx))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -796,24 +844,16 @@
   ^Split
   [merger & branches]
 
-  (let [bs (into [] branches)
-        cnt (count branches)
-        ^TaskDef
-        join (cond
-               (= :and merger) (andjoin cnt)
-               (= :or merger) (orjoin cnt)
-               :else (nuljoin))]
+  (let [cnt (count branches)]
     (log/debug "forking with [%d] branches" cnt)
     (reify
 
       Initable
 
-      (init [this p]
-        (let [nx (.next ^Step p)
-              s (.create join nx)]
-          (->> {:forks (Innards. s bs)
-                :joinStyle merger}
-               (.init ^Initable p))))
+      (init [_ p]
+        (->> {:joinStyle merger
+              :forks branches}
+             (.init ^Initable p)))
 
       Split
 
@@ -1000,7 +1040,7 @@
 
       (dbgShow [_ out] )
 
-      (dbgStr [_] ""))))
+      (dbgStr [_] (str @data)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;

@@ -73,17 +73,14 @@
           (fork :and
                 (script #(do->nil
                           (safeWait 1000)
-                          (log/debug "1000------")
                           (.setv ^Job %2 :x 5)))
                 (script #(do->nil
-                          (safeWait 10500)
-                          (log/debug "1500------")
+                          (safeWait 1500)
                           (.setv ^Job %2 :y 5))))
           (script #(do->nil
                     (->> (+ (.getv ^Job %2 :x)
                             (.getv ^Job %2 :y))
-                         (log/debug "345435859349843")
-                         (.setv ^Job %2 :z ))), "POOY"))
+                         (.setv ^Job %2 :z )))))
         svr (mksvr)
         job (createJob svr ws)
         end (nihilStep job)]
@@ -128,7 +125,7 @@
   (let [ws
         (workStream->
           (ternary
-            (reify BoolExpr (ptest [_ j] false))
+            (reify BoolExpr (ptest [_ j] true))
             (script #(do->nil
                       (.setv ^Job %2 :a 10)))
             (script #(do->nil
@@ -185,6 +182,7 @@
         end (.createEx (nihil) job)]
     (.run (.core svr)
           (.create (.startWith ws) end))
+    (safeWait 2500)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -199,7 +197,7 @@
           (choice
             (reify ChoiceExpr (choose [_ j] "z"))
             (script #(do->nil
-                          (.setv ^Job %2 :z 10)))
+                          (.setv ^Job %2 :z 10)), "dft")
             "x" (script #(do->nil %1 %2 ))
             "y" (script #(do->nil %1 %2 ))))
         svr (mksvr)
@@ -207,6 +205,7 @@
         end (.createEx (nihil) job)]
     (.run (.core svr)
           (.create (.startWith ws) end))
+    (safeWait 2500)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -233,6 +232,7 @@
     (.setv job :z 0)
     (.run (.core svr)
           (.create (.startWith ws) end))
+    (safeWait 2500)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -258,6 +258,7 @@
     (.setv job :cnt 0)
     (.run (.core svr)
           (.create (.startWith ws) end))
+    (safeWait 2500)
     (.dispose (.core svr))
     (.getv job :cnt)))
 
@@ -265,20 +266,18 @@
 ;;
 (deftest czlabtestwflow-test
 
-
   (is (== 10 (testWFlowSplit->And)))
-  ;;(is (== 10 (testWFlowSplit->Or)))
+  (is (== 10 (testWFlowSplit->Or)))
 
-  ;;(is (== 10 (testWFlowSwitch->default)))
-  ;;(is (== 10 (testWFlowSwitch->found)))
+  (is (== 10 (testWFlowSwitch->default)))
+  (is (== 10 (testWFlowSwitch->found)))
 
-  ;;(is (== 10 (testWFlowIf->false)))
-  ;;(is (== 10 (testWFlowIf->true)))
+  (is (== 10 (testWFlowIf->false)))
+  (is (== 10 (testWFlowIf->true)))
 
-  ;;(is (== 10 (testWFlowWhile)))
-  ;;(is (== 10 (testWFlowFor)))
+  (is (== 10 (testWFlowWhile)))
+  (is (== 10 (testWFlowFor)))
 
-  (is true)
 )
 
 ;;(clojure.test/run-tests 'czlabtest.wflow.test)
