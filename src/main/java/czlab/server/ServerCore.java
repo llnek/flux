@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import czlab.xlib.Activable;
 import czlab.xlib.Identifiable;
 import czlab.xlib.CU;
+import czlab.xlib.Interruptable;
 import czlab.xlib.Schedulable;
 import czlab.xlib.TCore;
 import java.util.Map;
@@ -57,19 +58,19 @@ public class ServerCore implements Schedulable {
   }
 
   @Override
+  public void purge() {
+    _timer.purge();
+  }
+
+  @Override
   public void deactivate() {
     _timer.cancel();
     _holdQ.clear();
     _core.stop();
   }
 
-  private void addTimer(final Runnable w, final long delay) {
-    final ServerCore me= this;
-    _timer.schedule(new TimerTask() {
-      public void run() {
-        me.wakeup(w);
-      }
-    }, delay);
+  private void addTimer(TimerTask t, final long delay) {
+    _timer.schedule(t, delay);
   }
 
   private Object xrefPid(Runnable w) {
@@ -81,7 +82,27 @@ public class ServerCore implements Schedulable {
   }
 
   @Override
-  public void postpone(Runnable w, long delayMillis) {
+  public Object alarm(final Interruptable w,
+      final Object arg,
+      long delayMillis) {
+
+    final ServerCore me= this;
+    TimerTask t= null;
+    if (delayMillis > 0L) {
+      t= new TimerTask() {
+        public void run() {
+          w.interrupt(arg);
+        }
+      };
+      addTimer(t, delayMillis);
+    }
+    return t;
+  }
+
+  @Override
+  public Object postpone(final Runnable w, long delayMillis) {
+    final ServerCore me= this;
+    TimerTask t= null;
     if (delayMillis < 0L) {
       hold(w);
     }
@@ -90,8 +111,14 @@ public class ServerCore implements Schedulable {
       run(w);
     }
     else {
-      addTimer(w, delayMillis);
+      t= new TimerTask() {
+        public void run() {
+          me.wakeup(w);
+        }
+      };
+      addTimer(t, delayMillis);
     }
+    return t;
   }
 
   @Override

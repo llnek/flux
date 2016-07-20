@@ -24,6 +24,8 @@
      :refer [do->true
              doto->>
              do->nil
+             throwIOE
+             spos?
              inst?
              cast?]]
     [clojure.java.io :as io]
@@ -32,6 +34,7 @@
   (:import
     [java.util.concurrent.atomic AtomicInteger]
     [czlab.server ServerLike ServiceHandler]
+    [java.util TimerTask]
     [czlab.wflow
      Switch
      Delay
@@ -170,11 +173,36 @@
          (when-some
            [a
             (if (inst? Catchable ws)
-              (->> (.catche ^Catchable ws e#)
+              (->> (StepError. this e#)
+                   (.catche ^Catchable ws)
                    (cast? TaskDef))
-              nil)]
+              (do->nil
+                (log/error "" e#)))]
            (->> (nihilStep job)
                 (.create ^TaskDef a )))))]
+    (stepRunAfter rc)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- onInterrupt
+
+  ""
+  [^Step this ^Job j wsecs]
+
+  (let
+    [err (format "interruption: %s : %d msecs"
+                 "timer expired" (* 1000 wsecs))
+     ws (.wflow j)
+     rc
+     (when-some
+       [a
+        (if (inst? Catchable ws)
+          (->> (StepError. this err)
+               (.catche ^Catchable ws )
+               (cast? TaskDef))
+          (do->nil (log/error err)))]
+       (->> (nihilStep j)
+            (.create ^TaskDef a )))]
     (stepRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -196,6 +224,7 @@
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (handle [this j] this)
+      (interrupt [_ _])
       (setNext [_ n] )
       (job [this] _job)
       (proto [_] actDef)
@@ -229,6 +258,7 @@
         (swap! info assoc :next n))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
+      (interrupt [_ _])
       (handle [this j]
         (let [cpu (.core (.container ^Job j))
               nx (.next this)]
@@ -297,6 +327,7 @@
       (id [_] pid)
       (proto [_] actDef)
       (next [_] (:next @info))
+      (interrupt [_ _])
       (handle [this j]
         (let [a (-> (get-in @info [:vars :work])
                     (apply this j []))
@@ -362,6 +393,7 @@
       (attrs [_] (:vars @info))
       (id [_] pid)
       (proto [_] actDef)
+      (interrupt [_ _])
       (handle [this j]
         (let
           [cs (get-in @info [:vars :choices])
@@ -441,6 +473,7 @@
       (next [_] (:next @info))
       (id [_] pid)
       (proto [_] actDef)
+      (interrupt [_ _])
       (handle [this j]
         (let
           [b (get-in @info [:vars :forks])
@@ -454,7 +487,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn nuljoin
+(defn- nuljoin
 
   "Create a do-nothing Join Task"
   ^NulJoin
@@ -506,36 +539,59 @@
       (next [_] (:next @info))
       (proto [_] actDef)
       (id [_] pid)
+      (interrupt [this j]
+        (let [w (get-in @info [:vars :wait])]
+          (log/debug "and-join time out")
+          (->>
+            (merge
+              (:vars @info)
+              {:error true})
+            (swap! info assoc :vars))
+          (onInterrupt this j w)))
       (handle [this j]
         (let
           [b (get-in @info [:vars :forks])
+           z (get-in @info [:vars :alarm])
+           e (get-in @info [:vars :error])
+           w (get-in @info [:vars :wait])
            cpu (.core (.container ^Job j))
            ^AtomicInteger
            c (get-in @info [:vars :cnt])]
-          (if (number? b)
+          (cond
+            (true? e)
+            (do->nil
+              (log/debug "toolate, errored alreadt"))
+            (number? b)
             (let [nv (.incrementAndGet c)]
               (if (== nv b)
                 (do
+                  (when (some? z)
+                    (.cancel ^TimerTask z))
                   (reinit! actDef this)
                   (.next this))
                 nil))
+            :else
             (if-not (empty? b)
               (do->nil
                 (doseq [t (seq b)]
                   (->> (.create ^TaskDef t this)
                        (.run cpu)))
-                (->> (assoc (:vars @info)
-                            :forks (count b))
-                     (swap! info assoc :vars)))
+                (->>
+                  (merge
+                    (:vars @info)
+                    {:alarm (when (spos? w)
+                              (.alarm cpu this j (* 1000 w)))
+                     :forks (count b)})
+                  (swap! info assoc :vars)))
               (.next this))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn andjoin
+(defn- andjoin
 
   "Create a And Join Task"
   ^AndJoin
-  [branches]
+  [branches waitSecs]
 
   (reify
 
@@ -543,6 +599,7 @@
 
     (init [_ s]
       (->> {:cnt (AtomicInteger. 0)
+            :wait waitSecs
             :forks branches}
            (.init ^Initable s)))
 
@@ -584,15 +641,32 @@
       (next [_] (:next @info))
       (proto [_] actDef)
       (id [_] pid)
+      (interrupt [this j]
+        (let [w (get-in @info [:vars :wait])]
+          (log/debug "or-join time out")
+          (->>
+            (merge
+              (:vars @info)
+              {:error true})
+            (swap! info assoc :vars))
+          (onInterrupt this j w)))
       (handle [this j]
         (let
           [b (get-in @info [:vars :forks])
+           z (get-in @info [:vars :alarm])
+           e (get-in @info [:vars :error])
+           w (get-in @info [:vars :wait])
            cpu (.core (.container ^Job j))
            ^AtomicInteger
            c (get-in @info [:vars :cnt])]
-          (if (number? b)
+          (cond
+            (true? e)
+            nil
+            (number? b)
             (let [nv (.incrementAndGet c)
                   nx (.next this)]
+              (when (some? z)
+                (.cancel ^TimerTask z))
               (cond
                 (== 0 b)
                 (do (reinit! actDef this) nx)
@@ -607,24 +681,28 @@
                   (reinit! actDef this))
 
                 :else nil))
+            :else
             (if-not (empty? b)
               (do->nil
                 (doseq [t (seq b)]
                   (->> (.create ^TaskDef t this)
                        (.run cpu)))
-                (->> (assoc (:vars @info)
-                            :forks
-                            (count b))
-                     (swap! info assoc :vars)))
+                (->>
+                  (merge
+                    (:vars @info)
+                    {:alarm (when (spos? w)
+                              (.alarm cpu this j (* 1000 w)))
+                     :forks (count b)})
+                  (swap! info assoc :vars)))
               (.next this))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn orjoin
+(defn- orjoin
 
   "Create a Or Join Task"
   ^OrJoin
-  [branches]
+  [branches waitSecs]
 
   (reify
 
@@ -632,6 +710,7 @@
 
     (init [_ s]
       (->> {:cnt (AtomicInteger. 0)
+            :wait waitSecs
             :forks branches}
            (.init ^Initable s)))
 
@@ -673,6 +752,7 @@
       (next [_] (:next @info))
       (attrs [_] (:vars @info))
       (proto [_] actDef)
+      (interrupt [_ _])
       (handle [this j]
         (let
           [p (get-in @info [:vars :test])
@@ -743,6 +823,7 @@
       (attrs [_] (:vars @info))
       (proto [_] actDef)
       (id [_] pid)
+      (interrupt [_ _])
       (handle [this j]
         (with-local-vars [rc this]
           (let [p (get-in @info [:vars :bexpr])
@@ -838,15 +919,17 @@
       (attrs [_] (:vars @info))
       (proto [_] actDef)
       (id [_] pid)
+      (interrupt [_ _])
       (handle [this j]
         (let
           [t (get-in @info [:vars :joinStyle])
+           ws (get-in @info [:vars :wait])
            cs (get-in @info [:vars :forks])
            nx (.next this)
            ^TaskDef jx
            (cond
-             (= :and t) (andjoin cs)
-             (= :or t) (orjoin cs)
+             (= :and t) (andjoin cs ws)
+             (= :or t) (orjoin cs ws)
              :else (nuljoin cs)) ]
           (.create jx nx))))))
 
@@ -856,9 +939,13 @@
 
   "Create a Split Task"
   ^Split
-  [merger & branches]
+  [options & branches]
 
-  (let [cnt (count branches)]
+  {:pre [(map? options)]}
+
+  (let [wsecs (or (:waitSecs options) 0)
+        cnt (count branches)
+        merger (or (:join options) :nul)]
     (log/debug "forking with [%d] branches" cnt)
     (reify
 
@@ -866,6 +953,7 @@
 
       (init [_ p]
         (->> {:joinStyle merger
+              :wait wsecs
               :forks branches}
              (.init ^Initable p)))
 
@@ -907,6 +995,7 @@
       (id [_] pid)
       (attrs [_] (:vars @info))
       (proto [_] actDef)
+      (interrupt [_ _])
       (handle [this j]
         (let
           [cs (get-in @info [:vars :list])
@@ -1074,7 +1163,8 @@
           (persistent!
             (reduce
               #(do
-                 (assert (inst? TaskDef %2))
+                 (assert (or (inst? TaskDef %2)
+                             (map? %2)))
                  (cond
                    (map? %2) (do (var-set opts %2) %1)
                    (inst? TaskDef %2) (conj! %1 %2)

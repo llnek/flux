@@ -31,18 +31,14 @@ public class StepError extends Exception {
   }
 
   /**/
-  public StepError(String msg,Throwable e) {
-    this(null, msg,e);
+  public StepError(Step n, String msg) {
+    super(msg);
+    _step=n;
   }
 
   /**/
-  public StepError(Throwable e) {
-    this(null,"", e);
-  }
-
-  /**/
-  public StepError(String msg) {
-    this(null, msg,null);
+  public StepError(Step n,Throwable e) {
+    this(n, "",e);
   }
 
   /**/

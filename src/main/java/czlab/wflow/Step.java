@@ -15,12 +15,13 @@
 package czlab.wflow;
 
 import czlab.xlib.RunnableWithId;
+import czlab.xlib.Interruptable;
 
 /**
  * @author Kenneth Leung
  *
  */
-public interface Step extends RunnableWithId {
+public interface Step extends RunnableWithId, Interruptable {
 
   /**/
   public void setNext(Step n);

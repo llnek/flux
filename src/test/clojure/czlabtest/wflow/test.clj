@@ -26,7 +26,9 @@
   (:import
     [czlab.server ServerLike]
     [czlab.wflow
+     Step
      Job
+     StepError
      BoolExpr
      RangeExpr
      ChoiceExpr]
@@ -65,12 +67,46 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defn- testWFlowSplit->And->Expire
+  "should return 100"
+  []
+  (let [ws
+        (workStream->
+          (fork
+            {:join :and
+             :waitSecs 2}
+            (script #(do->nil
+                       (safeWait 1000)
+                       (.setv ^Job %2 :x 5)))
+            (script #(do->nil
+                       (safeWait 4500)
+                       (.setv ^Job %2 :y 5))))
+          (script #(do->nil
+                    (->> (+ (.getv ^Job %2 :x)
+                            (.getv ^Job %2 :y))
+                         (.setv ^Job %2 :z ))))
+          {:error
+           (fn [^StepError e]
+             (let [^Step s (.lastStep e)
+                   j (.job s)]
+               (.setv j :z 100)))})
+        svr (mksvr)
+        job (createJob svr ws)
+        end (nihilStep job)]
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (safeWait 3000)
+    (.dispose (.core svr))
+    (.getv job :z)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defn- testWFlowSplit->And
   "should return 10"
   []
   (let [ws
         (workStream->
-          (fork :and
+          (fork {:join :and}
                 (script #(do->nil
                           (safeWait 1000)
                           (.setv ^Job %2 :x 5)))
@@ -98,7 +134,7 @@
 
   (let [ws
         (workStream->
-          (fork :or
+          (fork {:join :or}
                 (script #(do->nil
                           (safeWait 1000)
                           (.setv ^Job %2 :a 10)))
@@ -233,7 +269,6 @@
     (.run (.core svr)
           (.create (.startWith ws) end))
     (safeWait 2500)
-    (log/debug "JOB = %s" (.dbgStr job))
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -267,6 +302,7 @@
 ;;
 (deftest czlabtestwflow-test
 
+  (is (== 100 (testWFlowSplit->And->Expire)))
   (is (== 10 (testWFlowSplit->And)))
   (is (== 10 (testWFlowSplit->Or)))
 
