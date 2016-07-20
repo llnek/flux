@@ -300,6 +300,30 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defn- testWFlowDelay
+  "should return "
+  []
+
+  (let [now (System/currentTimeMillis)
+        ws
+        (workStream->
+          (postpone 2)
+          (script #(do->nil
+                     (->> (System/currentTimeMillis)
+                          (.setv ^Job %2 :time)))))
+        svr (mksvr)
+        job (createJob svr ws)
+        end (.createEx (nihil) job)]
+    (.setv job :time -1)
+    (.run (.core svr)
+          (.create (.startWith ws) end))
+    (safeWait 2500)
+    (.dispose (.core svr))
+    (- (.getv job :time)
+       now)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (deftest czlabtestwflow-test
 
   (is (== 100 (testWFlowSplit->And->Expire)))
@@ -314,6 +338,12 @@
 
   (is (== 10 (testWFlowWhile)))
   (is (== 10 (testWFlowFor)))
+
+  (is (let [x (testWFlowDelay)]
+        (println "s = " x)
+        (and (> x 2000)
+             (< x 3000))))
+
 
 )
 
