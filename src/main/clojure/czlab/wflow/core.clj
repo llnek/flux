@@ -12,7 +12,7 @@
 ;;
 ;; Copyright (c) 2013-2016, Kenneth Leung. All rights reserved.
 
-(ns ^{:doc "A Minimal worflow framework."
+(ns ^{:doc "A minimal worflow framework."
       :author "Kenneth Leung"}
 
   czlab.wflow.core
@@ -24,7 +24,6 @@
      :refer [do->true
              doto->>
              do->nil
-             throwIOE
              spos?
              inst?
              cast?]]
@@ -33,8 +32,8 @@
 
   (:import
     [java.util.concurrent.atomic AtomicInteger]
-    [czlab.server ServerLike ServiceHandler]
     [java.util TimerTask]
+    [czlab.server ServerLike]
     [czlab.wflow
      Switch
      Delay
@@ -81,7 +80,7 @@
 ;;
 (defn nihil
 
-  "Create a special Terminator Task"
+  "Create a special *terminator task*"
   ^Nihil
   []
 
@@ -93,13 +92,13 @@
 
     Nihil
 
-    (create [this c]
-      (.createEx this (.job c)))
+    (create [this step]
+      (.createEx this (.job step)))
 
     (name [_] "nihil")
 
-    (createEx [this j]
-      (doto->> (stepize this nil j)
+    (createEx [this job]
+      (doto->> (stepize this nil job)
                (.init this )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -133,21 +132,23 @@
 
   (if (some? this)
     (let [cpu (.core (.container (.job this)))]
-      (log/debug "step-to-run-next ==> %s"
-                 (.name ^Nameable (.proto this)))
       (if
         (inst? Nihil (.proto this))
-        (log/debug "nihil => stop or skip")
-        ;;else
-        (.run cpu this)))
-    (log/debug "step-to-run-next ==> null")))
+        (log/debug "nihil ==> stop or skip")
+        (do
+          (log/debug
+            "next-to-run ==> {%s}"
+            (.name ^Nameable (.proto this)))
+          (.run cpu this))))
+    (log/debug "next-to-run ==> null")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmacro nihilStep
 
   ""
-  ^Step
+  {:private true
+   :tag Step}
   [^Job job]
 
   `(.createEx (nihil) ~job))
@@ -187,12 +188,13 @@
 (defn- onInterrupt
 
   ""
-  [^Step this ^Job j wsecs]
+  [^Step this ^Job job waitSecs]
 
   (let
-    [err (format "interruption: %s : %d msecs"
-                 "timer expired" (* 1000 wsecs))
-     ws (.wflow j)
+    [err (format "*interruption* %s : %d msecs"
+                 "timer expired"
+                 (* 1000 waitSecs))
+     ws (.wflow  job)
      rc
      (when-some
        [a
@@ -201,7 +203,7 @@
                (.catche ^Catchable ws )
                (cast? TaskDef))
           (do->nil (log/error err)))]
-       (->> (nihilStep j)
+       (->> (nihilStep job)
             (.create ^TaskDef a )))]
     (stepRunAfter rc)))
 
@@ -223,14 +225,14 @@
 
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
-      (handle [this j] this)
+      (handle [this j] nil)
       (interrupt [_ _])
       (setNext [_ n] )
       (job [this] _job)
       (proto [_] actDef)
       (attrs [_] nil)
       (id [_] pid)
-      (next [this] this))))
+      (next [this] nil))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -253,24 +255,25 @@
       Step
 
       (job [this] (.job (.next this)))
-      (setNext [_ n]
-        (assert (some? n))
-        (swap! info assoc :next n))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (interrupt [_ _])
-      (handle [this j]
-        (let [cpu (.core (.container ^Job j))
-              nx (.next this)]
-          (->> (get-in @info [:vars :delay])
-               (* 1000 )
-               (.postpone cpu nx))
-          (reinit! actDef this)
-          nil))
+      (setNext [_ nx]
+        (assert (some? nx))
+        (swap! info assoc :next nx))
       (attrs [_] (:vars @info))
+      (next [_] (:next @info))
       (id [_] pid)
       (proto [_] actDef)
-      (next [_] (:next @info)))))
+      (rerun [this] (rerun! this))
+      (run [this] (stepRun this))
+      (interrupt [_ _] )
+      (handle [this j]
+        (let
+          [cpu (.core (.container ^Job j))
+           nx (.next this)]
+          (->> (get-in @info [:vars :delay])
+               (* 1000 )
+               (.postpone cpu nx ))
+          (reinit! actDef this)
+          nil)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -286,16 +289,17 @@
 
     Initable
 
-    (init [_ s]
+    (init [_ step]
       (->> {:delay delaySecs}
-           (.init ^Initable s)))
+           (.init ^Initable step)))
 
     Delay
 
     (name [_] "delay")
-    (create [this c]
-      (doto->> (stepize this c)
-               (.init this)))))
+
+    (create [this nx]
+      (doto->> (stepize this nx)
+               (.init this )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -318,20 +322,21 @@
       Step
 
       (job [this] (.job (.next this)))
-      (setNext [_ n]
-        (assert (some? n))
-        (swap! info assoc :next n))
+      (setNext [_ nx]
+        (assert (some? nx))
+        (swap! info assoc :next nx))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (attrs [_] (:vars @info))
       (id [_] pid)
       (proto [_] actDef)
       (next [_] (:next @info))
-      (interrupt [_ _])
+      (interrupt [_ _] )
       (handle [this j]
-        (let [a (-> (get-in @info [:vars :work])
-                    (apply this j []))
-              nx (.next this)]
+        (let
+          [a (-> (get-in @info [:vars :work])
+                 (apply this j []))
+           nx (.next this)]
           (reinit! actDef this)
           (if
             (inst? TaskDef a)
@@ -342,25 +347,25 @@
 ;;
 (defn script
 
-  "Create a Programmable Task"
+  "Create a *scriptable task*"
   ^Script
-  [workFunc &[nm]]
+  [workFunc & [nm]]
   {:pre [(fn? workFunc)]}
 
   (reify
 
     Initable
 
-    (init [_ s]
+    (init [_ step]
       (->> {:work workFunc}
-           (.init ^Initable s)))
+           (.init ^Initable step)))
 
     Script
 
     (name [_] (stror nm "script"))
 
-    (create [this c]
-      (doto->> (stepize this c)
+    (create [this nx]
+      (doto->> (stepize this nx)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -384,22 +389,22 @@
       Step
 
       (job [this] (.job (.next this)))
-      (setNext [_ n]
-        (assert (some? n))
-        (swap! info assoc :next n))
+      (setNext [_ nx]
+        (assert (some? nx))
+        (swap! info assoc :next nx))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (next [_] (:next @info))
       (attrs [_] (:vars @info))
       (id [_] pid)
       (proto [_] actDef)
-      (interrupt [_ _])
-      (handle [this j]
+      (interrupt [_ _] )
+      (handle [this job]
         (let
           [cs (get-in @info [:vars :choices])
            dft (get-in @info [:vars :dft])
            e (get-in @info [:vars :cexpr])
-           m (.choose ^ChoiceExpr e ^Job j)
+           m (.choose ^ChoiceExpr e ^Job job)
            a (if (some? m)
                (some #(if
                         (= m (first %1))
@@ -419,9 +424,9 @@
 
     Initable
 
-    (init [_ s]
+    (init [_ step]
       (let
-        [nx (.next ^Step s)
+        [nx (.next ^Step step)
          cs
          (->>
            (persistent!
@@ -435,14 +440,14 @@
         (->> {:dft (some-> dft (.create nx))
               :cexpr cexpr
               :choices cs}
-             (.init ^Initable s))))
+             (.init ^Initable step))))
 
     Switch
 
     (name [_] "switch")
 
-    (create [this c]
-      (doto->> (stepize this c)
+    (create [this nx]
+      (doto->> (stepize this nx)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -464,25 +469,24 @@
       Step
 
       (job [this] (.job (.next this)))
-      (setNext [_ n]
-        (assert (some? n))
-        (swap! info assoc :next n))
+      (setNext [_ nx]
+        (assert (some? nx))
+        (swap! info assoc :next nx))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (attrs [_] (:vars @info))
       (next [_] (:next @info))
       (id [_] pid)
       (proto [_] actDef)
-      (interrupt [_ _])
-      (handle [this j]
+      (interrupt [_ _] )
+      (handle [this job]
         (let
-          [b (get-in @info [:vars :forks])
-           cpu (.core (.container ^Job j))]
-          (if-not (empty? b)
-            (do->nil
-              (doseq [t (seq b)]
-                (->> (.create ^TaskDef t this)
-                     (.run cpu)))))
+          [cpu (.core (.container ^Job job))
+           nx (nihilStep job)
+           bs (get-in @info [:vars :forks])]
+          (doseq [^TaskDef t (seq bs)]
+            (.run cpu
+                  (.create t nx)))
           (.next this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -497,16 +501,16 @@
 
     Initable
 
-    (init [_ s]
+    (init [_ step]
       (->> {:forks branches}
-           (.init ^Initable s)))
+           (.init ^Initable step)))
 
     NulJoin
 
     (name [_] "nuljoin")
 
-    (create [this c]
-      (doto->> (stepize this c)
+    (create [this nx]
+      (doto->> (stepize this nx)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -530,9 +534,9 @@
       Step
 
       (job [this] (.job (.next this)))
-      (setNext [_ n]
-        (assert (some? n))
-        (swap! info assoc :next n))
+      (setNext [_ nx]
+        (assert (some? nx))
+        (swap! info assoc :next nx))
       (rerun [this] (rerun! this))
       (run [this] (stepRun this))
       (attrs [_] (:vars @info))
@@ -541,47 +545,53 @@
       (id [_] pid)
       (interrupt [this j]
         (let [w (get-in @info [:vars :wait])]
-          (log/debug "and-join time out")
+          (log/warn "and-join time out")
           (->>
             (merge
               (:vars @info)
               {:error true})
             (swap! info assoc :vars))
           (onInterrupt this j w)))
-      (handle [this j]
+      (handle [this job]
         (let
-          [b (get-in @info [:vars :forks])
+          [cpu (.core (.container ^Job job))
+           b (get-in @info [:vars :forks])
            z (get-in @info [:vars :alarm])
            e (get-in @info [:vars :error])
            w (get-in @info [:vars :wait])
-           cpu (.core (.container ^Job j))
            ^AtomicInteger
            c (get-in @info [:vars :cnt])]
           (cond
             (true? e)
             (do->nil
-              (log/debug "toolate, errored alreadt"))
+              (log/debug "too late"))
+
             (number? b)
-            (let [nv (.incrementAndGet c)]
-              (if (== nv b)
-                (do
-                  (when (some? z)
-                    (.cancel ^TimerTask z))
-                  (reinit! actDef this)
-                  (.next this))
-                nil))
+            (if (== b (.incrementAndGet c))
+              (do
+                (when (some? z)
+                  (.cancel ^TimerTask z))
+                (reinit! actDef this)
+                (.next this))
+              nil)
+
             :else
             (if-not (empty? b)
               (do->nil
-                (doseq [t (seq b)]
-                  (->> (.create ^TaskDef t this)
+                (doseq [^TaskDef t b]
+                  (->> (.create t this)
                        (.run cpu)))
                 (->>
                   (merge
                     (:vars @info)
-                    {:alarm (when (spos? w)
-                              (.alarm cpu this j (* 1000 w)))
-                     :forks (count b)})
+                    {:alarm
+                     (when (spos? w)
+                       (.alarm cpu
+                               this
+                               job
+                               (* 1000 w)))
+                     :forks
+                     (count b)})
                   (swap! info assoc :vars)))
               (.next this))))))))
 
@@ -589,7 +599,7 @@
 ;;
 (defn- andjoin
 
-  "Create a And Join Task"
+  "Create a *join(and) task*"
   ^AndJoin
   [branches waitSecs]
 
@@ -597,18 +607,18 @@
 
     Initable
 
-    (init [_ s]
+    (init [_ step]
       (->> {:cnt (AtomicInteger. 0)
             :wait waitSecs
             :forks branches}
-           (.init ^Initable s)))
+           (.init ^Initable step)))
 
     AndJoin
 
     (name [_] "andjoin")
 
-    (create [this c]
-      (doto->> (stepize this c)
+    (create [this nx]
+      (doto->> (stepize this nx)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

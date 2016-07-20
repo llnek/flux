@@ -58,7 +58,7 @@
                    ))
         )
       job (createJob svr ws)
-      end (nihilStep job)]
+      end (.createEx (nihil) job)]
   (.run (.core svr)
           (.create (.startWith ws) end))
   (safeWait 3000)
@@ -92,7 +92,7 @@
                (.setv j :z 100)))})
         svr (mksvr)
         job (createJob svr ws)
-        end (nihilStep job)]
+        end (.createEx (nihil) job)]
     (.run (.core svr)
           (.create (.startWith ws) end))
     (safeWait 3000)
@@ -119,7 +119,7 @@
                          (.setv ^Job %2 :z )))))
         svr (mksvr)
         job (createJob svr ws)
-        end (nihilStep job)]
+        end (.createEx (nihil) job)]
     (.run (.core svr)
           (.create (.startWith ws) end))
     (safeWait 2500)
