@@ -15,15 +15,20 @@
 
 package czlab.wflow;
 
+import czlab.xlib.Schedulable;
+
 /**
  *
  * @author Kenneth Leung
  *
  */
-@FunctionalInterface public interface WorkStream {
+public interface WorkStream {
 
   /**/
-  public TaskDef startWith();
+  public void execWith(Schedulable s, Job j);
+
+  /**/
+  public TaskDef head();
 
 }
 
