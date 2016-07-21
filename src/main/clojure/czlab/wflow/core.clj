@@ -70,6 +70,79 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defn- rerun!
+
+  ""
+  [^Step s]
+
+  (some-> s
+          (.job )
+          (.container )
+          (.core )
+          (.reschedule s)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- gcpu
+  ""
+  ^Schedulable
+  [^Job job]
+  (.core (.container job)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmacro sv!
+  ""
+  {:private true}
+  [info vs]
+  `(swap! ~info assoc :vars ~vs))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- mv!
+  ""
+  [info m]
+  (->> (merge (:vars @info) m)
+       (sv! info )))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- fanout
+  ""
+  [^Schedulable cpu ^Step nx defs]
+  (doseq [t defs]
+    (->> (.create ^TaskDef t nx)
+         (.run cpu ))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- sa!
+  ""
+  [^Schedulable cpu ^Step step job w]
+  (when (spos? w)
+    (.alarm cpu step job (* 1000 w))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defmacro sn!
+  ""
+  {:private true}
+  [info nx]
+  `(do
+     (assert (some? ~nx))
+     (swap! ~info assoc :next ~nx)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- ri!
+
+  "Reset a step"
+  [^Initable a ^Step s]
+
+  (.init a s))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defmulti stepize
 
   ""
@@ -77,6 +150,48 @@
    :tag Step}
 
   (fn [a b & xs] (class a)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(declare stepRunAfter)
+(declare stepRun)
+(defn- protoStep
+  ""
+  ^Step
+  [^TaskDef actDef ^Step nxtStep args]
+
+  (let [info (atom {:next nxtStep
+                    :vars {}})
+        pid (CU/nextSeqLong)]
+    (reify
+
+      Initable
+
+      (init [this m]
+        (if-some [f (:init args)]
+          (f this info m)
+          (swap! info assoc :vars m)))
+
+      Step
+
+      (setNext [_ nx] (sn! info nx))
+      (job [this]
+        (or (:job args)
+            (.job (.next this))))
+      (rerun [this] (rerun! this))
+      (run [this] (stepRun this))
+      (attrs [_] (:vars @info))
+      (id [_] pid)
+      (proto [_] actDef)
+      (next [_] (:next @info))
+      (interrupt [this job]
+        (when-some
+          [f (:interrupt args)]
+          (f this info job)))
+      (handle [this job]
+        (when-some
+          [f (:handle args)]
+          (f this info job))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -105,35 +220,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- ri!
-
-  "Reset a step"
-  [^Initable a ^Step s]
-
-  (.init a  s))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- rerun!
-
-  ""
-  [^Step s]
-
-  (some-> s
-          (.job )
-          (.container )
-          (.core )
-          (.reschedule s)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defn- stepRunAfter
 
   ""
   [^Step this]
 
   (if (some? this)
-    (let [cpu (.core (.container (.job this)))]
+    (let [cpu (gcpu (.job this))]
       (if
         (inst? Nihil (.proto this))
         (log/debug "nihil ==> stop or skip")
@@ -151,7 +244,7 @@
   ""
   {:private true
    :tag Step}
-  [^Job job]
+  [job]
 
   `(.createEx (nihil) ~job))
 
@@ -165,7 +258,7 @@
   (log/debug "%s :handle()"
              (.name ^Nameable (.proto this)))
   ;;if this step is in a pending queue, remove it
-  (-> (.core (.container (.job this)))
+  (-> (gcpu (.job this))
       (.dequeue this))
   (let
     [job (.job this)
@@ -215,82 +308,17 @@
     (stepRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmacro sv!
-  ""
-  {:private true}
-  [info vs]
-  `(swap! ~info assoc :vars ~vs))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- mv!
-  ""
-  [info m]
-  (->> (merge (:vars @info) m)
-       (sv! info )))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- fanout
-  ""
-  [^Schedulable cpu ^Step nx defs]
-  (doseq [t defs]
-    (->> (.create ^TaskDef t nx)
-         (.run cpu ))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- sa!
-  ""
-  [^Schedulable cpu ^Step step job w]
-  (when (spos? w)
-    (.alarm cpu step job (* 1000 w))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmacro sn!
-  ""
-  {:private true}
-  [info nx]
-  `(do
-     (assert (some? ~nx))
-     (swap! ~info assoc :next ~nx)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- gcpu
-  ""
-  ^Schedulable
-  [^Job job]
-  (.core (.container job)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; this is a terminator step, does nothing
 (defmethod stepize
 
   Nihil
   [^TaskDef actDef ^Step nxtStep & [^Job _job]]
 
-  (let [pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m])
-
-      Step
-
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (handle [this j] nil)
-      (interrupt [_ _])
-      (setNext [_ n] )
-      (job [this] _job)
-      (proto [_] actDef)
-      (attrs [_] nil)
-      (id [_] pid)
-      (next [this] nil))))
+  (assert (nil? nxtStep))
+  (assert (some? _job))
+  (protoStep actDef
+             nxtStep
+             {:job _job}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -299,28 +327,11 @@
   Delay
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m]
-        (swap! info assoc :vars m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (attrs [_] (:vars @info))
-      (next [_] (:next @info))
-      (id [_] pid)
-      (proto [_] actDef)
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (interrupt [_ _] )
-      (handle [this job]
+  (protoStep
+    actDef
+    nxtStep
+    {:handle
+      (fn [^Step this info ^Job job]
         (let
           [nx (.next this)
            cpu (gcpu job)]
@@ -328,7 +339,7 @@
                (* 1000 )
                (.postpone cpu nx ))
           (ri! actDef this)
-          nil)))))
+          nil))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -363,39 +374,22 @@
   Script
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m]
-        (swap! info assoc :vars m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (attrs [_] (:vars @info))
-      (id [_] pid)
-      (proto [_] actDef)
-      (next [_] (:next @info))
-      (interrupt [_ _] )
-      (handle [this j]
-        (let
-          [a (-> (get-in @info [:vars :work])
-                 (apply this j []))
-           nx (.next this)]
-          ;;do the work, if a TaskDef is returned
-          ;;run it
-          (ri! actDef this)
-          (if
-            (inst? TaskDef a)
-            (.create ^TaskDef a nx)
-            nx))))))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle
+     (fn [^Step this info ^Job job]
+       (let
+         [a (-> (get-in @info [:vars :work])
+                (apply this job []))
+          nx (.next this)]
+         ;;do the work, if a TaskDef is returned
+         ;;run it
+         (ri! actDef this)
+         (if
+           (inst? TaskDef a)
+           (.create ^TaskDef a nx)
+           nx)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -429,39 +423,21 @@
   Switch
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m]
-        (swap! info assoc :vars m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (next [_] (:next @info))
-      (attrs [_] (:vars @info))
-      (id [_] pid)
-      (proto [_] actDef)
-      (interrupt [_ _] )
-      (handle [this job]
-        (let
-          [cs (get-in @info [:vars :choices])
-           dft (get-in @info [:vars :dft])
-           e (get-in @info [:vars :cexpr])
-           m (.choose ^ChoiceExpr e job)
-           a (if (some? m)
-               (some #(if
-                        (= m (first %1))
-                        (last %1) nil) cs) nil)]
-          (ri! actDef this)
-          (or a dft))))))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle
+     (fn [^Step this info ^Job job]
+       (let
+         [{:keys [cexpr dft choices]}
+          (:vars @info)
+          m (.choose ^ChoiceExpr cexpr job)
+          a (if (some? m)
+              (some #(if
+                       (= m (first %1))
+                       (last %1) nil) choices) nil)]
+         (ri! actDef this)
+         (or a dft)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -508,35 +484,20 @@
   NulJoin
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-      (init [_ m] )
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (attrs [_] (:vars @info))
-      (next [_] (:next @info))
-      (id [_] pid)
-      (proto [_] actDef)
-      (interrupt [_ _] )
-      (handle [this job]
-        ;;spawn all children and goto next
-        (let
-          [bs (get-in @info [:vars :forks])
-           nx (nihilStep job)
-           cpu (gcpu job)]
-          (doseq [^TaskDef t (seq bs)]
-            (.run cpu
-                  (.create t nx)))
-          (.next this))))))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle
+     (fn [^Step this info ^Job job]
+       ;;spawn all children and goto next
+       (let
+         [bs (get-in @info [:vars :forks])
+          nx (nihilStep job)
+          cpu (gcpu job)]
+         (doseq [^TaskDef t (seq bs)]
+           (.run cpu
+                 (.create t nx)))
+         (.next this)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -569,64 +530,48 @@
   AndJoin
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
+  (protoStep
+    actDef
+    nxtStep
+    {:interrupt
+     (fn [^Step this info ^Job job]
+       (log/warn "and-join time out")
+       (mv! info {:error true})
+       (->> (get-in @info [:vars :wait])
+            (onInterrupt this job )))
+     :handle
+     (fn [^Step this info ^Job job]
+       (let
+         [{:keys [forks alarm
+                  error wait cnt]}
+          (:vars @info)
+          cpu (gcpu job)]
+         (cond
+           (true? error)
+           (do->nil (log/debug "too late"))
 
-      Initable
+           (number? forks)
+           (if (== forks
+                   (-> ^AtomicInteger cnt
+                       (.incrementAndGet )))
+             ;;children all returned
+             (do
+               (when (some? alarm)
+                 (.cancel ^TimerTask alarm))
+               (ri! actDef this)
+               (.next this))
+             nil)
 
-      (init [_ m]
-        (swap! info assoc :vars m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (attrs [_] (:vars @info))
-      (next [_] (:next @info))
-      (proto [_] actDef)
-      (id [_] pid)
-      (interrupt [this j]
-        (log/warn "and-join time out")
-        (mv! info {:error true})
-        (->> (get-in @info [:vars :wait])
-             (onInterrupt this j )))
-      (handle [this job]
-        (let
-          [{:keys [forks alarm
-                   error wait cnt]}
-           (:vars @info)
-           cpu (gcpu job)]
-          (cond
-            (true? error)
-            (do->nil
-              (log/debug "too late"))
-
-            (number? forks)
-            (if (== forks
-                    (-> ^AtomicInteger cnt
-                        (.incrementAndGet )))
-              ;;children all returned
-              (do
-                (when (some? alarm)
-                  (.cancel ^TimerTask alarm))
-                (ri! actDef this)
-                (.next this))
-              nil)
-
-            :else
-            (if-not (empty? forks)
-              (do->nil
-                (fanout cpu this forks)
-                (->>
-                  {:alarm
-                   (sa! cpu this job wait)
-                   :forks (count forks)}
-                  (mv! info)))
-              (.next this))))))))
+           :else
+           (if-not (empty? forks)
+             (do->nil
+               (fanout cpu this forks)
+               (->>
+                 {:alarm
+                  (sa! cpu this job wait)
+                  :forks (count forks)}
+                 (mv! info)))
+             (.next this)))))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -661,60 +606,46 @@
   OrJoin
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m] (sv! info m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (attrs [_] (:vars @info))
-      (next [_] (:next @info))
-      (proto [_] actDef)
-      (id [_] pid)
-      (interrupt [this j]
-        (log/debug "or-join time out")
-        (mv! info {:error true})
-        (->> (get-in @info [:vars :wait])
-             (onInterrupt this j )))
-      (handle [this job]
-        (let
-          [{:keys [forks alarm error
-                   wait cnt]}
-           (:vars @info)
-           cpu (gcpu job)
-           nx (.next this)]
-          (cond
-            (true? error)
-            nil
-            (number? forks)
-            (let
-              [rc
-               (when (some? alarm)
-                 (.cancel ^TimerTask alarm)
-                 (mv! info {:alarm nil})
-                 nx)]
-              (if (>= (-> ^AtomicInteger cnt
-                          (.incrementAndGet ))
-                      forks)
-                (ri! actDef this))
-              rc)
-            :else
-            (do
-              (fanout cpu this forks)
-              (->>
-                {:alarm (sa! cpu this job wait)
-                 :forks (count forks) }
-                (mv! info))
-              (if (empty? forks) nx nil))))))))
+  (protoStep
+    actDef
+    nxtStep
+    {:interrupt
+     (fn [^Step this info ^Job job]
+       (log/debug "or-join time out")
+       (mv! info {:error true})
+       (->> (get-in @info [:vars :wait])
+            (onInterrupt this job)))
+     :handle
+     (fn [^Step this info ^Job job]
+       (let
+         [{:keys [forks alarm error
+                  wait cnt]}
+          (:vars @info)
+          cpu (gcpu job)
+          nx (.next this)]
+         (cond
+           (true? error)
+           nil
+           (number? forks)
+           (let
+             [rc
+              (when (some? alarm)
+                (.cancel ^TimerTask alarm)
+                (mv! info {:alarm nil})
+                nx)]
+             (if (>= (-> ^AtomicInteger cnt
+                         (.incrementAndGet ))
+                     forks)
+               (ri! actDef this))
+             rc)
+           :else
+           (do
+             (fanout cpu this forks)
+             (->>
+               {:alarm (sa! cpu this job wait)
+                :forks (count forks) }
+               (mv! info))
+             (if (empty? forks) nx nil)))))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -749,33 +680,17 @@
   If
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m] (sv! info m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (id [_] pid)
-      (next [_] (:next @info))
-      (attrs [_] (:vars @info))
-      (proto [_] actDef)
-      (interrupt [_ _])
-      (handle [this job]
-        (let
-          [{:keys [test then else]}
-           (:vars @info)
-           b (.ptest ^BoolExpr test job)]
-          (ri! actDef this)
-          (if b then else))))))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle
+     (fn [^Step this info ^Job job]
+       (let
+         [{:keys [test then else]}
+          (:vars @info)
+          b (.ptest ^BoolExpr test job)]
+         (ri! actDef this)
+         (if b then else)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -813,55 +728,35 @@
 (defn- stepizeLoop
 
   ""
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
+  (fn [^Step this info ^Job job]
+    (let [{:keys [bexpr ^Step body]}
+          (:vars @info)
+          nx (.next this)
+          b (.ptest ^BoolExpr bexpr job)]
+      (if-not b
+        (do (ri! actDef this) nx)
+        (if-some
+          [n (.handle body job)]
+          (cond
+            (inst? Delay (.proto n))
+            (do (.setNext n this) n)
 
-      Initable
+            (identical? n this)
+            this
 
-      (init [_ m] (sv! info m))
+            ;; replace body
+            (inst? Step n)
+            (do
+              (->> (.next body)
+                   (.setNext n))
+              (->> {:body n}
+                   (mv! info))
+              this)
 
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (next [_] (:next @info))
-      (attrs [_] (:vars @info))
-      (proto [_] actDef)
-      (id [_] pid)
-      (interrupt [_ _])
-      (handle [this job]
-        (with-local-vars [rc this]
-          (let [{:keys [bexpr ^Step body]}
-                (:vars @info)
-                nx (.next this)
-                b (.ptest ^BoolExpr bexpr job)]
-            (if-not b
-              (do (ri! actDef this) nx)
-              (if-some
-                [n (.handle body job)]
-                (cond
-                  (inst? Delay (.proto n))
-                  (do (.setNext n this) n)
-
-                  (= n this)
-                  this
-
-                  (inst? Step n)
-                  (do ;; replace body
-                    (->> (.next body)
-                         (.setNext n))
-                    (->> {:body n}
-                         (mv! info))
-                    this)
-
-                  :else this)
-                this))))))))
+            :else this)
+          this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -870,7 +765,10 @@
   While
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (apply stepizeLoop actDef nxtStep xs))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle (stepizeLoop actDef nxtStep)}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -904,39 +802,23 @@
   Split
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m] (sv! info m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (next [_] (:next @info))
-      (attrs [_] (:vars @info))
-      (proto [_] actDef)
-      (id [_] pid)
-      (interrupt [_ _])
-      (handle [this j]
-        (let
-          [{:keys [joinStyle wait forks]}
-           (:vars @info)
-           ^TaskDef t
-           (cond
-             (= :and joinStyle)
-             (andjoin forks wait)
-             (= :or joinStyle)
-             (orjoin forks wait)
-             :else
-             (nuljoin forks))]
-          (.create t (.next this)))))))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle
+     (fn [^Step this info ^Job job]
+       (let
+         [{:keys [joinStyle wait forks]}
+          (:vars @info)
+          ^TaskDef t
+          (cond
+            (= :and joinStyle)
+            (andjoin forks wait)
+            (= :or joinStyle)
+            (orjoin forks wait)
+            :else
+            (nuljoin forks))]
+         (.create t (.next this))))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -977,41 +859,23 @@
   Group
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (let [info (atom {:next nxtStep
-                    :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
-
-      (init [_ m] (sv! info m))
-
-      Step
-
-      (job [this] (.job (.next this)))
-      (setNext [_ nx] (sn! info nx))
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
-      (next [_] (:next @info))
-      (id [_] pid)
-      (attrs [_] (:vars @info))
-      (proto [_] actDef)
-      (interrupt [_ _])
-      (handle [this job]
-        (let
-          [cs (get-in @info [:vars :list])
-           nx (.next this)]
-          (if-not (empty? @cs)
-            (let [a
-                  (-> ^TaskDef (first @cs)
-                      (.create ^Step this))
-                  r (rest @cs)
-                  rc (.handle a job)]
-              (reset! cs r)
-              rc)
-            (do
-              (ri! actDef this)
-              nx)))))))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle
+     (fn [^Step this info ^Job job]
+       (let
+         [cs (get-in @info [:vars :list])
+          nx (.next this)]
+         (if-not (empty? @cs)
+           (let [a
+                 (-> ^TaskDef (first @cs)
+                     (.create ^Step this))
+                 r (rest @cs)
+                 rc (.handle a job)]
+             (reset! cs r)
+             rc)
+           (do (ri! actDef this) nx))))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1065,7 +929,10 @@
   For
   [^TaskDef actDef ^Step nxtStep & xs]
 
-  (apply stepizeLoop actDef nxtStep xs))
+  (protoStep
+    actDef
+    nxtStep
+    {:handle (stepizeLoop actDef nxtStep)}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
