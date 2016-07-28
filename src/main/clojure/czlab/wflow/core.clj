@@ -195,7 +195,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- nihil
+(defn- nihil<>
 
   "Create a special *terminator task*"
   ^Nihil
@@ -239,14 +239,14 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro nihilStep
+(defmacro nihilStep<>
 
   ""
   {:private true
    :tag Step}
   [job]
 
-  `(.createEx (nihil) ~job))
+  `(.createEx (nihil<>) ~job))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -277,7 +277,7 @@
                    (cast? TaskDef))
               (do->nil
                 (log/error "" e#)))]
-           (->> (nihilStep job)
+           (->> (nihilStep<> job)
                 (.create ^TaskDef a )))))]
     (stepRunAfter rc)))
 
@@ -303,7 +303,7 @@
                (.catche ^Catchable ws )
                (cast? TaskDef))
           (do->nil (log/error err)))]
-       (->> (nihilStep job)
+       (->> (nihilStep<> job)
             (.create ^TaskDef a )))]
     (stepRunAfter rc)))
 
@@ -343,7 +343,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn postpone
+(defn postpone<>
 
   "Create a *delay task*"
   ^Delay
@@ -393,7 +393,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn script
+(defn script<>
 
   "Create a *scriptable task*"
   ^Script
@@ -441,7 +441,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn choice
+(defn choice<>
 
   "Create a *switch task*"
   ^Switch
@@ -492,7 +492,7 @@
        ;;spawn all children and goto next
        (let
          [bs (get-in @info [:vars :forks])
-          nx (nihilStep job)
+          nx (nihilStep<> job)
           cpu (gcpu job)]
          (doseq [^TaskDef t (seq bs)]
            (.run cpu
@@ -694,7 +694,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn ternary
+(defn ternary<>
 
   "Create a *if task*"
   ^If
@@ -772,7 +772,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn wloop
+(defn wloop<>
 
   "Create a *while task*"
   ^While
@@ -822,7 +822,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn fork
+(defn fork<>
 
   "Create a *split task*"
   ^Split
@@ -879,7 +879,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn group
+(defn group<>
 
   "Create a *group task*"
   ^Group
@@ -936,7 +936,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn floop
+(defn floop<>
 
   "Create a *for task*"
   ^For
@@ -966,7 +966,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn createJob
+(defn createJob<>
 
   ""
   ^Job
@@ -1028,7 +1028,7 @@
 
   (.run core
         (-> (.head ws)
-            (.create (nihilStep job)))))
+            (.create (nihilStep<> job)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1037,16 +1037,16 @@
   [t0 more]
 
   (if-not (empty? more)
-    (apply group t0 more)
+    (apply group<> t0 more)
     t0))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn workStream->
+(defn workStream<>
 
   "Create a work flow with the
   follwing syntax:
-  (workStream-> taskdef [taskdef...] [:catch func])"
+  (workStream<> taskdef [taskdef...] [:catch func])"
   ^WorkStream
   [^TaskDef task0 & args]
 

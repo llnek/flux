@@ -40,24 +40,23 @@
   ""
   ^ServerLike
   []
-  (let [_c (mkScheduler "test")]
+  (let [_c (scheduler<> "test")]
     (.activate _c {})
     (reify ServerLike (core [_] _c))))
 
 (comment
 (let [svr (mksvr)
       ws
-      (workStream->
-        (script #(do->nil
-                   %1 %2
-                   (println "dddddddddddddddd")
-                   ))
-        (script #(do->nil
-                   %1 %2
-                   (println "ffffffffffffffff")
-                   ))
-        )
-      job (createJob svr ws)]
+      (workStream<>
+        (script<> #(do->nil
+                     %1 %2
+                     (println "dddddddddddddddd")
+                     ))
+        (script<> #(do->nil
+                     %1 %2
+                     (println "ffffffffffffffff")
+                     )))
+      job (createJob<> svr ws)]
   (.execWith ws (.core svr) job)
   (safeWait 3000)
   (println "dispose")
@@ -69,27 +68,27 @@
   "should return 100"
   []
   (let [ws
-        (workStream->
-          (fork
+        (workStream<>
+          (fork<>
             {:join :and
              :waitSecs 2}
-            (script #(do->nil
-                       (safeWait 1000)
-                       (.setv ^Job %2 :x 5)))
-            (script #(do->nil
-                       (safeWait 4500)
-                       (.setv ^Job %2 :y 5))))
-          (script #(do->nil
-                    (->> (+ (.getv ^Job %2 :x)
-                            (.getv ^Job %2 :y))
-                         (.setv ^Job %2 :z ))))
+            (script<> #(do->nil
+                         (safeWait 1000)
+                         (.setv ^Job %2 :x 5)))
+            (script<> #(do->nil
+                         (safeWait 4500)
+                         (.setv ^Job %2 :y 5))))
+          (script<> #(do->nil
+                      (->> (+ (.getv ^Job %2 :x)
+                              (.getv ^Job %2 :y))
+                           (.setv ^Job %2 :z ))))
           :catch
           (fn [^StepError e]
             (let [^Step s (.lastStep e)
                   j (.job s)]
               (.setv j :z 100))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.execWith ws (.core svr) job)
     (safeWait 3000)
     (.dispose (.core svr))
@@ -101,20 +100,20 @@
   "should return 10"
   []
   (let [ws
-        (workStream->
-          (fork {:join :and}
-                (script #(do->nil
-                          (safeWait 1000)
-                          (.setv ^Job %2 :x 5)))
-                (script #(do->nil
-                          (safeWait 1500)
-                          (.setv ^Job %2 :y 5))))
-          (script #(do->nil
-                    (->> (+ (.getv ^Job %2 :x)
-                            (.getv ^Job %2 :y))
-                         (.setv ^Job %2 :z )))))
+        (workStream<>
+          (fork<> {:join :and}
+                  (script<> #(do->nil
+                               (safeWait 1000)
+                               (.setv ^Job %2 :x 5)))
+                  (script<> #(do->nil
+                               (safeWait 1500)
+                               (.setv ^Job %2 :y 5))))
+          (script<> #(do->nil
+                       (->> (+ (.getv ^Job %2 :x)
+                               (.getv ^Job %2 :y))
+                            (.setv ^Job %2 :z )))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.execWith ws (.core svr) job)
     (safeWait 2500)
     (.dispose (.core svr))
@@ -127,23 +126,22 @@
   []
 
   (let [ws
-        (workStream->
-          (fork {:join :or}
-                (script #(do->nil
-                          (safeWait 1000)
-                          (.setv ^Job %2 :a 10)))
-                (script #(do->nil
-                          (safeWait 5000)
-                          (.setv ^Job %2 :b 5))))
-          (script #(do->nil
-                    (assert (.contains ^Job %2 :a)))))
+        (workStream<>
+          (fork<> {:join :or}
+                  (script<> #(do->nil
+                               (safeWait 1000)
+                               (.setv ^Job %2 :a 10)))
+                  (script<> #(do->nil
+                               (safeWait 5000)
+                               (.setv ^Job %2 :b 5))))
+          (script<> #(do->nil
+                       (assert (.contains ^Job %2 :a)))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.execWith ws (.core svr) job)
     (safeWait 2500)
     (.dispose (.core svr))
     (.getv job :a)))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -151,20 +149,19 @@
   "should return 10"
   []
   (let [ws
-        (workStream->
-          (ternary
+        (workStream<>
+          (ternary<>
             (reify BoolExpr (ptest [_ j] true))
-            (script #(do->nil
-                      (.setv ^Job %2 :a 10)))
-            (script #(do->nil
-                      (.setv ^Job %2 :a 5)))))
+            (script<> #(do->nil
+                         (.setv ^Job %2 :a 10)))
+            (script<> #(do->nil
+                         (.setv ^Job %2 :a 5)))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.execWith ws (.core svr) job)
     (safeWait 1500)
     (.dispose (.core svr))
     (.getv job :a)))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -172,20 +169,19 @@
   "should return 10"
   []
   (let [ws
-        (workStream->
-          (ternary
+        (workStream<>
+          (ternary<>
             (reify BoolExpr (ptest [_ j] false))
-            (script #(do->nil
-                      (.setv ^Job %2 :a 5)))
-            (script #(do->nil
-                      (.setv ^Job %2 :a 10)))))
+            (script<> #(do->nil
+                         (.setv ^Job %2 :a 5)))
+            (script<> #(do->nil
+                         (.setv ^Job %2 :a 10)))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.execWith ws (.core svr) job)
     (safeWait 1500)
     (.dispose (.core svr))
     (.getv job :a)))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -194,15 +190,15 @@
   []
 
   (let [ws
-        (workStream->
-          (choice
+        (workStream<>
+          (choice<>
             (reify ChoiceExpr (choose [_ j] "z"))
             nil
-            "y" (script #(do->nil %1 %2 ))
-            "z" (script #(do->nil
-                          (.setv ^Job %2 :z 10)))))
+            "y" (script<> #(do->nil %1 %2 ))
+            "z" (script<> #(do->nil
+                             (.setv ^Job %2 :z 10)))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.execWith ws (.core svr) job)
     (safeWait 2500)
     (.dispose (.core svr))
@@ -215,20 +211,19 @@
   []
 
   (let [ws
-        (workStream->
-          (choice
+        (workStream<>
+          (choice<>
             (reify ChoiceExpr (choose [_ j] "z"))
-            (script #(do->nil
-                          (.setv ^Job %2 :z 10)), "dft")
-            "x" (script #(do->nil %1 %2 ))
-            "y" (script #(do->nil %1 %2 ))))
+            (script<> #(do->nil
+                         (.setv ^Job %2 :z 10)), "dft")
+            "x" (script<> #(do->nil %1 %2 ))
+            "y" (script<> #(do->nil %1 %2 ))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.execWith ws (.core svr) job)
     (safeWait 2500)
     (.dispose (.core svr))
     (.getv job :z)))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -237,17 +232,17 @@
   []
 
   (let [ws
-        (workStream->
-          (floop
+        (workStream<>
+          (floop<>
             (reify RangeExpr
               (lower [_ j] 0)
               (upper [_ j] 10))
-            (script #(do->nil
-                      (->>
-                        (inc (.getv ^Job %2 :z))
-                        (.setv ^Job %2 :z ))))))
+            (script<> #(do->nil
+                         (->>
+                           (inc (.getv ^Job %2 :z))
+                           (.setv ^Job %2 :z ))))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.setv job :z 0)
     (.execWith ws (.core svr) job)
     (safeWait 2500)
@@ -261,17 +256,17 @@
   []
 
   (let [ws
-        (workStream->
-          (wloop
+        (workStream<>
+          (wloop<>
             (reify BoolExpr
               (ptest [_ j]
                 (< (.getv ^Job j :cnt) 10)))
-            (script #(do->nil
-                      (->>
-                        (inc (.getv ^Job %2 :cnt))
-                        (.setv ^Job %2 :cnt))))))
+            (script<> #(do->nil
+                         (->>
+                           (inc (.getv ^Job %2 :cnt))
+                           (.setv ^Job %2 :cnt))))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.setv job :cnt 0)
     (.execWith ws (.core svr) job)
     (safeWait 2500)
@@ -286,19 +281,18 @@
 
   (let [now (System/currentTimeMillis)
         ws
-        (workStream->
-          (postpone 2)
-          (script #(do->nil
-                     (->> (System/currentTimeMillis)
-                          (.setv ^Job %2 :time)))))
+        (workStream<>
+          (postpone<> 2)
+          (script<> #(do->nil
+                       (->> (System/currentTimeMillis)
+                            (.setv ^Job %2 :time)))))
         svr (mksvr)
-        job (createJob svr ws)]
+        job (createJob<> svr ws)]
     (.setv job :time -1)
     (.execWith ws (.core svr) job)
     (safeWait 2500)
     (.dispose (.core svr))
-    (- (.getv job :time)
-       now)))
+    (- (.getv job :time) now)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
