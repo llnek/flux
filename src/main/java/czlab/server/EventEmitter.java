@@ -28,8 +28,8 @@ public interface EventEmitter extends Suspendable {
 
   public void dispatch(Event evt, Object options);
 
-  public ServerLike container();
-  public Object getConfig();
+  public ServerLike server();
+  public Object config();
 
   public boolean isEnabled();
   public boolean isActive();
