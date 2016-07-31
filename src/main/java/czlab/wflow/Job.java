@@ -35,10 +35,10 @@ public interface Job extends Gettable , Settable, Identifiable, Debuggable {
   public void clrLastResult() ;
 
   /**/
-  public Object getLastResult() ;
+  public Object lastResult() ;
 
   /**/
-  public ServerLike container();
+  public ServerLike server();
 
   /**/
   public void clear();

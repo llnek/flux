@@ -77,7 +77,7 @@
 
   (some-> s
           (.job )
-          (.container )
+          (.server )
           (.core )
           (.reschedule s)))
 
@@ -87,7 +87,7 @@
   ""
   ^Schedulable
   [^Job job]
-  (.core (.container job)))
+  (.core (.server job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -970,7 +970,7 @@
 
   ""
   ^Job
-  [^ServerLike server ^WorkStream ws & [^Event evt]]
+  [^ServerLike _server ^WorkStream ws & [^Event evt]]
 
   (let [jslast (keyword Job/JS_LAST)
         data (atom {})
@@ -997,7 +997,7 @@
       (clear [_]
         (reset! data {}))
 
-      (container [_] server)
+      (server [_] _server)
 
       (event [_] evt)
 
@@ -1009,14 +1009,13 @@
       (clrLastResult [_]
         (swap! data dissoc jslast))
 
-      (getLastResult [_] (get @data jslast))
+      (lastResult [_] (get @data jslast))
 
       (wflow [_] ws)
 
       (dbgShow [_ out] )
 
       (dbgStr [_] (str @data)))))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;

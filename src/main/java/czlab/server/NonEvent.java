@@ -22,10 +22,10 @@ package czlab.server;
 public class NonEvent implements Event {
 
   private void init(final ServerLike s) {
-    _emit=new EventEmitter(){
+    _emit=new Emitter(){
           public void dispatch(Event evt, Object options) {}
-          public ServerLike container() {return s;}
-          public Object getConfig() {return null;}
+          public ServerLike server() {return s;}
+          public Object config() {return null;}
           public boolean isEnabled() {return true;}
           public boolean isActive() {return true;}
           public void suspend() {}
@@ -50,11 +50,11 @@ public class NonEvent implements Event {
   }
 
   @Override
-  public EventEmitter emitter() {
+  public Emitter emitter() {
     return _emit;
   }
 
-  private EventEmitter _emit;
+  private Emitter _emit;
 
 }
 
