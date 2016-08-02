@@ -24,6 +24,8 @@
      :refer [do->true
              doto->>
              do->nil
+             seqint2
+             muble<>
              spos?
              inst?
              cast?]]
@@ -966,36 +968,34 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn createJob<>
+(defn job<>
 
   ""
   ^Job
-  [^ServerLike _server ^WorkStream ws & [^Event evt]]
+  [^ServerLike _server & [^WorkStream ws ^Event evt]]
 
   (let [jslast (keyword Job/JS_LAST)
-        data (atom {})
-        jid (CU/nextSeqLong)]
-    (reify
-
-      Job
+        data (muble<>)
+        jid (seqint2)]
+    (reify Job
 
       (contains [_ k]
         (when (some? k)
-          (contains? @data k)))
+          (.contains data k)))
 
       (getv [_ k]
-        (when (some? k) (get @data k)))
+        (when (some? k) (.getv data k)))
 
       (setv [_ k v]
         (when (some? k)
-          (swap! data assoc k v)))
+          (.setv data k v)))
 
       (unsetv [_ k]
         (when (some? k)
-          (swap! data dissoc k)))
+          (.unsetv data k)))
 
       (clear [_]
-        (reset! data {}))
+        (.clear data))
 
       (server [_] _server)
 
@@ -1004,30 +1004,30 @@
       (id [_] jid)
 
       (setLastResult [_ v]
-        (swap! data assoc jslast v))
+        (.setv data jslast v))
 
       (clrLastResult [_]
-        (swap! data dissoc jslast))
+        (.unsetv data jslast))
 
-      (lastResult [_] (get @data jslast))
+      (lastResult [_]
+        (.getv data jslast))
 
       (wflow [_] ws)
 
       (dbgShow [_ out] )
 
-      (dbgStr [_] (str @data)))))
+      (dbgStr [_] (.toEDN data)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- wsExec
   ""
-  [^Schedulable core
-   ^Job job
-   ^WorkStream ws]
+  [^WorkStream ws
+   ^Job job]
 
-  (.run core
-        (-> (.head ws)
-            (.create (nihilStep<> job)))))
+  (-> (.core (.server job))
+    (.run (-> (.head ws)
+              (.create (nihilStep<> job))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1065,14 +1065,14 @@
     (if (fn? err)
       (reify
         WorkStream
-        (execWith [this s j] (wsExec s j this))
+        (execWith [this j] (wsExec this j))
         (head [_] (wsHead task0 tasks))
         Catchable
         (catche [_ e] (err e)))
       ;;else
       (reify
         WorkStream
-        (execWith [this s j] (wsExec s j this))
+        (execWith [this j] (wsExec this j))
         (head [_] (wsHead task0 tasks))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

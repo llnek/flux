@@ -15,11 +15,13 @@
 
 package czlab.server;
 
+import czlab.xlib.Identifiable;
+import czlab.xlib.Disposable;
 
 /**
  * @author Kenneth Leung
  */
-public interface ServiceHandler {
+public interface ServiceHandler extends Disposable, Identifiable {
 
   public Object handle(Object arg, Object options) throws Exception;
 
