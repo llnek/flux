@@ -19,33 +19,21 @@ package czlab.server;
 /**
  * @author Kenneth Leung
  */
-public class NonEvent implements Event {
+public class NulEmitter implements Emitter {
 
-  private void init(final ServerLike s) {
-    _emit=new NulEmitter(s);
-  }
+  public void dispatchEx(Event evt, Object options) {}
+  public void dispatch(Event evt) {}
+  public ServerLike server() {return _s;}
+  public Object config() {return null;}
+  public boolean isEnabled() {return true;}
+  public boolean isActive() {return true;}
+  public void suspend() {}
+  public void resume() {}
+  public EventHolder release(Object obj) {return null;}
+  public void hold(EventHolder obj) {}
 
-  public NonEvent(ServerLike s) {
-    init(s);
-  }
-
-  public NonEvent() {
-    this(null);
-  }
-
-
-  @Override
-  public Object id() {
-    return "nada";
-  }
-
-  @Override
-  public Emitter emitter() {
-    return _emit;
-  }
-
-  private Emitter _emit;
-
+  public NulEmitter(ServerLike s) { _s=s; }
+  private ServerLike _s;
 }
 
 
