@@ -25,7 +25,7 @@ import czlab.xlib.Schedulable;
 public interface WorkStream {
 
   /**/
-  public void execWith(Schedulable s, Job j);
+  public void execWith(Job j);
 
   /**/
   public TaskDef head();
