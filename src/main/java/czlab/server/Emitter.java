@@ -24,7 +24,7 @@ import czlab.xlib.Suspendable;
  * @author Kenneth Leung
  *
  */
-public interface Emitter extends Suspendable {
+public interface Emitter {
 
   public void dispatchEx(Event evt, Object arg);
   public void dispatch(Event evt);
