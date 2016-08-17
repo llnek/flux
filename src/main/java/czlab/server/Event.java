@@ -17,16 +17,11 @@ package czlab.server;
 
 
 import czlab.xlib.Identifiable;
-import czlab.xlib.XData;
 
 /**
  * @author Kenneth Leung
  */
 public interface Event extends Identifiable {
-
-  /**
-   */
-  public Emitter emitter();
 
 }
 
