@@ -278,7 +278,7 @@
                    (.catche ^Catchable ws)
                    (cast? TaskDef))
               (do->nil
-                (log/error "" e#)))]
+                (log/error e# "")))]
            (->> (nihilStep<> job)
                 (.create ^TaskDef a )))))]
     (stepRunAfter rc)))
@@ -1025,6 +1025,7 @@
   [^WorkStream ws
    ^Job job]
 
+  (.setv job :wflow ws)
   (-> (.core (.server job))
     (.run (-> (.head ws)
               (.create (nihilStep<> job))))))
