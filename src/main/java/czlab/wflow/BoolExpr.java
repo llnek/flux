@@ -18,7 +18,7 @@ package czlab.wflow;
  * @author Kenneth Leung
  */
 @FunctionalInterface public interface BoolExpr {
-  public boolean ptest(Object j);
+  public boolean ptest(Job j);
 }
 
 

@@ -18,24 +18,17 @@
   czlab.wflow.core
 
   (:require
-    [czlab.xlib.str :refer [stror hgl?]]
     [czlab.xlib.logging :as log]
-    [czlab.xlib.core
-     :refer [do->true
-             doto->>
-             do->nil
-             seqint2
-             muble<>
-             spos?
-             inst?
-             cast?]]
     [clojure.java.io :as io]
     [clojure.string :as cs])
+
+  (:use [czlab.xlib.core]
+        [czlab.xlib.str])
 
   (:import
     [java.util.concurrent.atomic AtomicInteger]
     [java.util TimerTask]
-    [czlab.server ServerLike]
+    [czlab.server Event ServerLike]
     [czlab.wflow
      Switch
      Delay
@@ -73,10 +66,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- rerun!
-
   ""
   [^Step s]
-
   (some-> s
           (.job )
           (.server )
@@ -85,17 +76,12 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- gcpu
-  ""
-  ^Schedulable
-  [^Job job]
-  (.core (.server job)))
+(defmacro ^:private gcpu "" [^Job job] `(.core (.server ~job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro sv!
+(defmacro ^:private sv!
   ""
-  {:private true}
   [info vs]
   `(swap! ~info assoc :vars ~vs))
 
@@ -120,28 +106,25 @@
 ;;
 (defn- sa!
   ""
-  [^Schedulable cpu ^Step step job w]
-  (when (spos? w)
-    (.alarm cpu step job (* 1000 w))))
+  [^Schedulable cpu ^Step step job wsecs]
+  (when (spos? wsecs)
+    (.alarm cpu step job (* 1000 wsecs))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro sn!
+(defmacro ^:private sn!
   ""
-  {:private true}
   [info nx]
-  `(do
-     (assert (some? ~nx))
-     (swap! ~info assoc :next ~nx)))
+  `(let [t# ~nx]
+     (assert (some? t#))
+     (swap! ~info assoc :next t#)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- ri!
-
+(defmacro ^:private ri!
   "Reset a step"
-  [^Initable a ^Step s]
-
-  (.init a s))
+  [a s]
+  `(.init ~(with-meta a {:tag 'Initable}) ~s))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -151,26 +134,26 @@
   {:private true
    :tag Step}
 
-  (fn [a b & xs] (class a)))
+  (fn [a b c] (class a)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(declare stepRunAfter)
-(declare stepRun)
-(defn- protoStep
+(declare stepRunAfter stepRun)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- protoStep<>
   ""
   ^Step
   [^TaskDef actDef ^Step nxtStep args]
 
   (let [info (atom {:next nxtStep
                     :vars {}})
-        pid (CU/nextSeqLong)]
-    (reify
-
-      Initable
+        pid (seqint2)]
+    (reify Initable
 
       (init [this m]
-        (if-some [f (:init args)]
+        (if-some [f (:initFn args)]
           (f this info m)
           (swap! info assoc :vars m)))
 
@@ -187,11 +170,11 @@
       (proto [_] actDef)
       (next [_] (:next @info))
       (interrupt [this job]
-        (when-some
+        (if-some
           [f (:interrupt args)]
           (f this info job)))
       (handle [this job]
-        (when-some
+        (if-some
           [f (:handle args)]
           (f this info job))))))
 
@@ -203,9 +186,7 @@
   ^Nihil
   []
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ m] )
 
@@ -241,11 +222,10 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro nihilStep<>
+(defmacro ^:private nihilStep<>
 
   ""
-  {:private true
-   :tag Step}
+  {:tag Step}
   [job]
 
   `(.createEx (nihil<>) ~job))
@@ -271,11 +251,11 @@
        (catch Throwable e#
          ;;if the error handler returns a new TaskDef
          ;;run it
-         (when-some
+         (if-some
            [a
-            (if (inst? Catchable ws)
+            (if-some [c (cast? Catchable ws)]
               (->> (StepError. this e#)
-                   (.catche ^Catchable ws)
+                   (.catche c)
                    (cast? TaskDef))
               (do->nil
                 (log/error e# "")))]
@@ -298,11 +278,11 @@
      ;;if the error handling returns a TaskDef
      ;;run it, else just log the error
      rc
-     (when-some
+     (if-some
        [a
-        (if (inst? Catchable ws)
+        (if-some [c (cast? Catchable ws)]
           (->> (StepError. this err)
-               (.catche ^Catchable ws )
+               (.catche c)
                (cast? TaskDef))
           (do->nil (log/error err)))]
        (->> (nihilStep<> job)
@@ -314,11 +294,11 @@
 (defmethod stepize
 
   Nihil
-  [^TaskDef actDef ^Step nxtStep & [^Job _job]]
+  [^TaskDef actDef ^Step nxtStep ^Job _job]
 
   (assert (nil? nxtStep))
   (assert (some? _job))
-  (protoStep actDef
+  (protoStep<> actDef
              nxtStep
              {:job _job}))
 
@@ -327,21 +307,21 @@
 (defmethod stepize
 
   Delay
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle
-      (fn [^Step this info ^Job job]
-        (let
-          [nx (.next this)
-           cpu (gcpu job)]
-          (->> (get-in @info [:vars :delay])
-               (* 1000 )
-               (.postpone cpu nx ))
-          (ri! actDef this)
-          nil))}))
+     (fn [^Step this info ^Job job]
+       (let
+         [nx (.next this)
+          cpu (gcpu job)]
+         (->> (get-in @info [:vars :delay])
+              (* 1000 )
+              (.postpone cpu nx ))
+         (ri! actDef this)
+         nil))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -350,12 +330,9 @@
   "Create a *delay task*"
   ^Delay
   [delaySecs]
-  {:pre [(some? delaySecs)
-         (not (neg? delaySecs))]}
+  {:pre [(spos? delaySecs)]}
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ step]
       (->> {:delay delaySecs}
@@ -366,7 +343,7 @@
     (name [_] "delay")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -374,16 +351,15 @@
 (defmethod stepize
 
   Script
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle
      (fn [^Step this info ^Job job]
        (let
-         [a (-> (get-in @info [:vars :work])
-                (apply this job []))
+         [a ((get-in @info [:vars :work]) this job)
           nx (.next this)]
          ;;do the work, if a TaskDef is returned
          ;;run it
@@ -398,42 +374,45 @@
 (defn script<>
 
   "Create a *scriptable task*"
-  ^Script
-  [workFunc & [nm]]
-  {:pre [(fn? workFunc)]}
+  {:tag Script}
 
-  (reify
 
-    Initable
+  ([workFunc] (script<> workFunc nil))
 
-    (init [_ step]
-      (->> {:work workFunc}
-           (.init ^Initable step)))
+  ([workFunc nm]
+   {:pre [(fn? workFunc)]}
+   (reify Initable
 
-    Script
+     (init [_ step]
+       (->> {:work workFunc}
+            (.init ^Initable step)))
 
-    (name [_] (stror nm "script"))
+     Script
 
-    (create [this nx]
-      (doto->> (stepize this nx)
-               (.init this)))))
+     (name [_] (stror nm "script"))
+
+     (create [this nx]
+       (doto->> (stepize this nx nil)
+                (.init this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod stepize
 
   Switch
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle
      (fn [^Step this info ^Job job]
        (let
-         [{:keys [cexpr dft choices]}
+         [{:keys [^ChoiceExpr cexpr
+                  dft
+                  choices]}
           (:vars @info)
-          m (.choose ^ChoiceExpr cexpr job)
+          m (.choose cexpr job)
           a (if (some? m)
               (some #(if
                        (= m (first %1))
@@ -449,20 +428,18 @@
   ^Switch
   [^ChoiceExpr cexpr ^TaskDef dft & choices]
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ step]
       (let
         [nx (.next ^Step step)
          cs
          (->>
-           (persistent!
+           (pcoll!
              (reduce
-               #(-> (conj! %1 (first %2))
-                    (conj! (.create ^TaskDef
-                                    (last %2) nx)))
+               #(let [[k ^TaskDef t] %2]
+                  (-> (conj! %1 k)
+                      (conj! (.create t nx))))
                (transient [])
                (partition 2 choices)))
            (partition 2))]
@@ -476,7 +453,7 @@
     (name [_] "switch")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -484,9 +461,9 @@
 (defmethod stepize
 
   NulJoin
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle
@@ -496,9 +473,9 @@
          [bs (get-in @info [:vars :forks])
           nx (nihilStep<> job)
           cpu (gcpu job)]
-         (doseq [^TaskDef t (seq bs)]
-           (.run cpu
-                 (.create t nx)))
+         (doseq [t (seq bs)]
+           (->> (.create ^TaskDef t nx)
+                (.run cpu)))
          (.next this)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -509,9 +486,7 @@
   ^NulJoin
   [branches]
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ step]
       (->> {:forks branches}
@@ -522,7 +497,7 @@
     (name [_] "nuljoin")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -530,9 +505,9 @@
 (defmethod stepize
 
   AndJoin
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:interrupt
@@ -553,16 +528,14 @@
            (do->nil (log/debug "too late"))
 
            (number? forks)
-           (if (== forks
-                   (-> ^AtomicInteger cnt
-                       (.incrementAndGet )))
+           (when (== forks
+                     (-> ^AtomicInteger cnt
+                         (.incrementAndGet )))
              ;;children all returned
-             (do
-               (when (some? alarm)
-                 (.cancel ^TimerTask alarm))
-               (ri! actDef this)
-               (.next this))
-             nil)
+             (if (some? alarm)
+               (.cancel ^TimerTask alarm))
+             (ri! actDef this)
+             (.next this))
 
            :else
            (if-not (empty? forks)
@@ -583,9 +556,7 @@
   ^AndJoin
   [branches waitSecs]
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ step]
       (->> {:cnt (AtomicInteger. 0)
@@ -598,7 +569,7 @@
     (name [_] "andjoin")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -606,9 +577,9 @@
 (defmethod stepize
 
   OrJoin
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:interrupt
@@ -657,9 +628,7 @@
   ^OrJoin
   [branches waitSecs]
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ step]
       (->> {:cnt (AtomicInteger. 0)
@@ -672,7 +641,7 @@
     (name [_] "orjoin")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -680,9 +649,9 @@
 (defmethod stepize
 
   If
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle
@@ -702,9 +671,7 @@
   ^If
   [^BoolExpr bexpr ^TaskDef then & [^TaskDef else]]
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [this step]
       (let
@@ -722,7 +689,7 @@
     (name [_] "if")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -765,9 +732,9 @@
 (defmethod stepize
 
   While
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle (stepizeLoop actDef nxtStep)}))
@@ -780,9 +747,7 @@
   ^While
   [^BoolExpr bexpr ^TaskDef body]
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [this step]
       (->> {:bexpr bexpr
@@ -794,7 +759,7 @@
     (name [_] "while")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -802,9 +767,9 @@
 (defmethod stepize
 
   Split
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle
@@ -829,16 +794,13 @@
   "Create a *split task*"
   ^Split
   [options & branches]
-
   {:pre [(map? options)]}
 
   (let [wsecs (or (:waitSecs options) 0)
         cnt (count branches)
         merger (or (:join options) :nil)]
     (log/debug "forking with [%d] branches" cnt)
-    (reify
-
-      Initable
+    (reify Initable
 
       (init [_ step]
         (->> {:joinStyle merger
@@ -851,7 +813,7 @@
       (name [_] "fork")
 
       (create [this nx]
-        (doto->> (stepize this nx)
+        (doto->> (stepize this nx nil)
                  (.init this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -859,9 +821,9 @@
 (defmethod stepize
 
   Group
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle
@@ -888,9 +850,7 @@
   [^TaskDef a & xs]
   {:pre [(some? a)]}
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ step]
       (->> {:list (atom (concat [a] xs))}
@@ -901,7 +861,7 @@
     (name [_] "group")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -915,12 +875,12 @@
   (let [_loop (atom 0)]
     (reify BoolExpr
       (ptest [_ j]
-        (let [w (.getv ^Job j :lowerRange)
-              u (.getv ^Job j :upperRange)
+        (let [w (.getv j :lowerRange)
+              u (.getv j :upperRange)
               v @_loop]
           (if (< (+ w v) u)
             (do->true
-              (.setv ^Job j For/RANGE_INDEX v)
+              (.setv j For/RANGE_INDEX v)
               (swap! _loop inc))
             false))))))
 
@@ -929,9 +889,9 @@
 (defmethod stepize
 
   For
-  [^TaskDef actDef ^Step nxtStep & xs]
+  [^TaskDef actDef ^Step nxtStep dummy]
 
-  (protoStep
+  (protoStep<>
     actDef
     nxtStep
     {:handle (stepizeLoop actDef nxtStep)}))
@@ -944,9 +904,7 @@
   ^For
   [^RangeExpr rexpr ^TaskDef body]
 
-  (reify
-
-    Initable
+  (reify Initable
 
     (init [_ step]
       (let [j (.job ^Step step)
@@ -963,7 +921,7 @@
     (name [_] "for")
 
     (create [this nx]
-      (doto->> (stepize this nx)
+      (doto->> (stepize this nx nil)
                (.init this)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -971,52 +929,54 @@
 (defn job<>
 
   ""
-  ^Job
-  [^ServerLike _server & [^WorkStream ws ^Event evt]]
+  {:tag Job}
 
-  (let [jslast (keyword Job/JS_LAST)
-        data (muble<>)
-        jid (seqint2)]
-    (reify Job
+  ([^ServerLike _server ^WorkStream ws] (job<> _server ws nil))
+  ([^ServerLike _server] (job<> _server nil nil))
+  ([^ServerLike _server ^WorkStream ws ^Event evt]
+   (let [jslast (keyword Job/JS_LAST)
+         data (muble<>)
+         jid (seqint2)]
+     (reify Job
 
-      (contains [_ k]
-        (when (some? k)
-          (.contains data k)))
+       (contains [_ k]
+         (if (some? k)
+           (.contains data k)))
 
-      (getv [_ k]
-        (when (some? k) (.getv data k)))
+       (getv [_ k]
+         (if (some? k) (.getv data k)))
 
-      (setv [_ k v]
-        (when (some? k)
-          (.setv data k v)))
+       (setv [_ k v]
+         (if (some? k)
+           (.setv data k v)))
 
-      (unsetv [_ k]
-        (when (some? k)
-          (.unsetv data k)))
+       (unsetv [_ k]
+         (if (some? k)
+           (.unsetv data k)))
 
-      (clear [_]
-        (.clear data))
+       (clear [_]
+         (.clear data))
 
-      (server [_] _server)
+       (server [_] _server)
 
-      (event [_] evt)
+       (event [_] evt)
 
-      (id [_] jid)
+       (id [_] jid)
 
-      (setLastResult [_ v]
-        (.setv data jslast v))
+       (setLastResult [_ v]
+         (.setv data jslast v))
 
-      (clrLastResult [_]
-        (.unsetv data jslast))
+       (clrLastResult [_]
+         (.unsetv data jslast))
 
-      (lastResult [_]
-        (.getv data jslast))
+       (lastResult [_]
+         (.getv data jslast))
 
-      (wflow [_] ws)
+       (wflow [_] ws)
 
-      (dbgShow [_ out] )
+       (dbgShow [_ out] )
 
-      (dbgStr [_] (.toEDN data)))))
+       (dbgStr [_] (.toEDN data))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -1024,7 +984,6 @@
   ""
   [^WorkStream ws
    ^Job job]
-
   (.setv job :wflow ws)
   (-> (.core (.server job))
     (.run (-> (.head ws)
@@ -1035,7 +994,6 @@
 (defn- wsHead
   ""
   [t0 more]
-
   (if-not (empty? more)
     (apply group<> t0 more)
     t0))
@@ -1043,13 +1001,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn workStream<>
-
   "Create a work flow with the
   follwing syntax:
   (workStream<> taskdef [taskdef...] [:catch func])"
   ^WorkStream
   [^TaskDef task0 & args]
-
   {:pre [(some? task0)]}
 
   ;;first we look for erro handling which

@@ -15,8 +15,6 @@
 
 package czlab.wflow;
 
-import czlab.xlib.Schedulable;
-
 /**
  *
  * @author Kenneth Leung

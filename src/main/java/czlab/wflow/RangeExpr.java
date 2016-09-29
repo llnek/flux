@@ -20,10 +20,10 @@ package czlab.wflow;
 public interface RangeExpr {
 
   /**/
-  public int lower(Object arg);
+  public int lower(Job arg);
 
   /**/
-  public int upper(Object arg);
+  public int upper(Job arg);
 
 }
 
