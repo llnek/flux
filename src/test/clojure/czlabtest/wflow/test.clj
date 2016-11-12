@@ -14,25 +14,23 @@
 
 (ns czlabtest.wflow.test
 
-  (:require
-    [czlab.wflow.core :refer :all]
-    [czlab.xlib.logging :as log])
+  (:require [czlab.wflow.core :refer :all]
+            [czlab.xlib.logging :as log])
 
   (:use [czlab.xlib.scheduler]
         [czlab.xlib.process]
         [czlab.xlib.core]
         [clojure.test])
 
-  (:import
-    [czlab.server ServerLike]
-    [czlab.wflow
-     Step
-     Job
-     StepError
-     BoolExpr
-     RangeExpr
-     ChoiceExpr]
-    [czlab.xlib Activable Schedulable CU]))
+  (:import [czlab.server ServerLike]
+           [czlab.wflow
+            Step
+            Job
+            StepError
+            BoolExpr
+            RangeExpr
+            ChoiceExpr]
+           [czlab.xlib Activable Schedulable CU]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -44,6 +42,8 @@
     (.activate _c {})
     (reify ServerLike (core [_] _c))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (comment
 (let [svr (mksvr)
       ws
@@ -115,7 +115,7 @@
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 2500)
+    (safeWait 3000)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -315,8 +315,9 @@
         (and (> x 2000)
              (< x 3000))))
 
+  (is (string? "That's all folks!")))
 
-)
+
 
 ;;(clojure.test/run-tests 'czlabtest.wflow.test)
 
