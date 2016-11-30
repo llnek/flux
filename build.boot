@@ -3,7 +3,7 @@
   :license {:name "Apache License 2.0"
             :url "http://www.apache.org/licenses/LICENSE-2.0"}
   :description ""
-  :url "https://github.com/llnek/fluxion"
+  :url "https://github.com/llnek/flux"
 
   :dependencies '[
 
@@ -19,10 +19,10 @@
   ]
 
   :source-paths #{"src/main/clojure" "src/main/java"}
-  :test-runner "czlabtest.fluxion.ClojureJUnit"
+  :test-runner "czlabtest.flux.ClojureJUnit"
   :version "1.0.0"
   :debug true
-  :project 'czlab/czlab-fluxion)
+  :project 'czlab/czlab-flux)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;

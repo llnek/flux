@@ -1,2 +1,2 @@
-# fluxion
+# flux
 Simple workflow engine
