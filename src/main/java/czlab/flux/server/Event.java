@@ -23,6 +23,10 @@ import czlab.xlib.Identifiable;
  */
 public interface Event extends Identifiable {
 
+  /**
+   */
+  public boolean isStale();
+
 }
 
 
