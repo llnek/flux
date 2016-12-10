@@ -151,8 +151,7 @@
         (if-some [f (:initFn args)]
           (f this info m)
           (swap! info
-                 assoc :vars (or m {})))
-        true)
+                 assoc :vars (or m {}))))
 
       Step
 
@@ -183,7 +182,7 @@
   []
   (reify Initable
 
-    (init [_ m] true)
+    (init [_ m] )
 
     Nihil
 
