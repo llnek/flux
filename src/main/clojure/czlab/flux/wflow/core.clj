@@ -151,7 +151,8 @@
         (if-some [f (:initFn args)]
           (f this info m)
           (swap! info
-                 assoc :vars (or m {}))))
+                 assoc :vars (or m {})))
+        true)
 
       Step
 
@@ -182,7 +183,7 @@
   []
   (reify Initable
 
-    (init [_ m] )
+    (init [_ m] true)
 
     Nihil
 
@@ -314,8 +315,8 @@
   (reify Initable
 
     (init [_ step]
-      (->> {:delay delaySecs}
-           (.init ^Initable step)))
+      (.init ^Initable step
+             {:delay delaySecs}))
 
     Delay
 
@@ -361,8 +362,8 @@
    (reify Initable
 
      (init [_ step]
-       (->> {:work workFunc}
-            (.init ^Initable step)))
+       (.init ^Initable step
+              {:work workFunc}))
 
      Script
 
@@ -461,8 +462,8 @@
   (reify Initable
 
     (init [_ step]
-      (->> {:forks branches}
-           (.init ^Initable step)))
+      (.init ^Initable step
+             {:forks branches}))
 
     NulJoin
 
