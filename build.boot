@@ -7,7 +7,7 @@
 
   :dependencies '[
 
-    [czlab/czlab-xlib "1.0.0" ]
+    [czlab/czlab-xlib "0.1.0" ]
 
     [org.clojure/clojure "1.8.0" ]
 
@@ -20,7 +20,7 @@
 
   :source-paths #{"src/main/clojure" "src/main/java"}
   :test-runner "czlabtest.flux.ClojureJUnit"
-  :version "1.0.0"
+  :version "0.1.0"
   :debug true
   :project 'czlab/czlab-flux)
 
