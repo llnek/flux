@@ -18,6 +18,8 @@ package czlab.flux.wflow;
  * @author Kenneth Leung
  */
 @FunctionalInterface public interface ChoiceExpr {
+  /**
+   */
   public Object choose(Job j);
 }
 

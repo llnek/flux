@@ -23,6 +23,8 @@ import czlab.xlib.Schedulable;
 @FunctionalInterface
 public interface ServerLike {
 
+  /**
+   */
   public Schedulable core();
 
 }
