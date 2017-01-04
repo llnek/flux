@@ -7,15 +7,13 @@
 
   :dependencies '[
 
+    [org.clojure/clojure "1.8.0"]
     [czlab/czlab-xlib "0.1.0" ]
 
-    [org.clojure/clojure "1.8.0" ]
-
     [com.cemerick/pomegranate "0.3.1" :scope "provided"]
+    [codox/codox "0.10.2" :scope "provided"]
     [net.mikera/cljunit "0.6.0" :scope "provided"]
     [junit/junit "4.12"  :scope "provided"]
-
-    [codox/codox "0.10.2" :scope "provided"]
   ]
 
   :source-paths #{"src/main/clojure" "src/main/java"}
@@ -27,13 +25,13 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (require
-  '[czlab.tpcl.boot
+  '[czlab.pariah.boot
     :as b
     :refer [artifactID fp! ge]]
   '[clojure.tools.logging :as log]
   '[clojure.java.io :as io]
   '[clojure.string :as cs]
-  '[czlab.xlib.antlib :as a])
+  '[czlab.pariah.antlib :as a])
 
 (import '[java.io File])
 
