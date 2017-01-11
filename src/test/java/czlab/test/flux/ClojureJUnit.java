@@ -8,14 +8,22 @@
  * You must not remove this notice, or any other, from this software.
  */
 
-package czlab.flux.wflow;
+package czlab.test.flux;
+
+import mikera.cljunit.ClojureTest;
+import java.util.Arrays;
+import java.util.List;
 
 /**
- * @author Kenneth Leung
- *
+ * @author kenl
  */
-public interface While extends TaskDef {
-
+public class ClojureJUnit extends ClojureTest {
+  @Override
+  public List<String> namespaces() {
+    return Arrays.asList(new String[] {
+      "czlab.test.flux.wflow.test"
+    });
+  }
 }
 
 
