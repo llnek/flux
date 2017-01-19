@@ -52,7 +52,7 @@
                      )))
       job (job<> svr ws)]
   (.execWith ws job)
-  (safeWait 3000)
+  (pause 3000)
   (println "dispose")
   (.dispose (.core svr))))
 
@@ -67,10 +67,10 @@
             {:join :and
              :waitSecs 2}
             (script<> #(do->nil
-                         (safeWait 1000)
+                         (pause 1000)
                          (.setv ^Job %2 :x 5)))
             (script<> #(do->nil
-                         (safeWait 4500)
+                         (pause 4500)
                          (.setv ^Job %2 :y 5))))
           (script<> #(do->nil
                       (->> (+ (.getv ^Job %2 :x)
@@ -84,7 +84,7 @@
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 3000)
+    (pause 3000)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -97,10 +97,10 @@
         (workStream<>
           (fork<> {:join :and}
                   (script<> #(do->nil
-                               (safeWait 1000)
+                               (pause 1000)
                                (.setv ^Job %2 :x 5)))
                   (script<> #(do->nil
-                               (safeWait 1500)
+                               (pause 1500)
                                (.setv ^Job %2 :y 5))))
           (script<> #(do->nil
                        (->> (+ (.getv ^Job %2 :x)
@@ -109,7 +109,7 @@
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 3000)
+    (pause 3000)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -123,17 +123,17 @@
         (workStream<>
           (fork<> {:join :or}
                   (script<> #(do->nil
-                               (safeWait 1000)
+                               (pause 1000)
                                (.setv ^Job %2 :a 10)))
                   (script<> #(do->nil
-                               (safeWait 5000)
+                               (pause 5000)
                                (.setv ^Job %2 :b 5))))
           (script<> #(do->nil
                        (assert (.contains ^Job %2 :a)))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 2500)
+    (pause 2500)
     (.dispose (.core svr))
     (.getv job :a)))
 
@@ -153,7 +153,7 @@
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 1500)
+    (pause 1500)
     (.dispose (.core svr))
     (.getv job :a)))
 
@@ -173,7 +173,7 @@
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 1500)
+    (pause 1500)
     (.dispose (.core svr))
     (.getv job :a)))
 
@@ -194,7 +194,7 @@
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 2500)
+    (pause 2500)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -215,7 +215,7 @@
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (safeWait 2500)
+    (pause 2500)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -239,7 +239,7 @@
         job (job<> svr ws)]
     (.setv job :z 0)
     (.execWith ws job)
-    (safeWait 2500)
+    (pause 2500)
     (.dispose (.core svr))
     (.getv job :z)))
 
@@ -263,7 +263,7 @@
         job (job<> svr ws)]
     (.setv job :cnt 0)
     (.execWith ws job)
-    (safeWait 2500)
+    (pause 2500)
     (.dispose (.core svr))
     (.getv job :cnt)))
 
@@ -284,7 +284,7 @@
         job (job<> svr ws)]
     (.setv job :time -1)
     (.execWith ws job)
-    (safeWait 2500)
+    (pause 2500)
     (.dispose (.core svr))
     (- (.getv job :time) now)))
 
