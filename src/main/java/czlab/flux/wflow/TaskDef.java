@@ -10,7 +10,7 @@
 
 package czlab.flux.wflow;
 
-import czlab.xlib.Nameable;
+import czlab.jasal.Nameable;
 
 /**
  * An TaskDef is the building block of a workflow.

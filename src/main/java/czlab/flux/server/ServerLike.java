@@ -10,7 +10,7 @@
 
 package czlab.flux.server;
 
-import czlab.xlib.Schedulable;
+import czlab.jasal.Schedulable;
 
 /**
  * @author Kenneth Leung

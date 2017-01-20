@@ -1,6 +1,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defproject io.czlab/flux "0.1.0"
+(defproject io.czlab/flux "1.0.0"
 
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
@@ -8,7 +8,7 @@
   :description "A simple workflow engine"
   :url "https://github.com/llnek/flux"
 
-  :dependencies [[io.czlab/xlib "0.1.0"]]
+  :dependencies [[io.czlab/basal "1.0.0"]]
 
   :plugins [[lein-codox "0.10.2"]
             [lein-pprint "1.1.2"]]

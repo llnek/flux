@@ -11,12 +11,12 @@
 
   czlab.flux.wflow.core
 
-  (:require [czlab.xlib.logging :as log]
+  (:require [czlab.basal.logging :as log]
             [clojure.java.io :as io]
             [clojure.string :as cs])
 
-  (:use [czlab.xlib.core]
-        [czlab.xlib.str])
+  (:use [czlab.basal.core]
+        [czlab.basal.str])
 
   (:import [java.util.concurrent.atomic AtomicInteger]
            [java.util TimerTask]
@@ -43,7 +43,7 @@
             RangeExpr
             ChoiceExpr
             WorkStream]
-           [czlab.xlib
+           [czlab.jasal
             Interruptable
             Identifiable
             Catchable

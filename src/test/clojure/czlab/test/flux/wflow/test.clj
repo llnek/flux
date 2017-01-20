@@ -9,11 +9,11 @@
 (ns czlab.test.flux.wflow.test
 
   (:require [czlab.flux.wflow.core :refer :all]
-            [czlab.xlib.logging :as log])
+            [czlab.basal.logging :as log])
 
-  (:use [czlab.xlib.scheduler]
-        [czlab.xlib.process]
-        [czlab.xlib.core]
+  (:use [czlab.basal.scheduler]
+        [czlab.basal.process]
+        [czlab.basal.core]
         [clojure.test])
 
   (:import [czlab.flux.server ServerLike]
@@ -24,7 +24,7 @@
             BoolExpr
             RangeExpr
             ChoiceExpr]
-           [czlab.xlib Activable Schedulable CU]))
+           [czlab.jasal Activable Schedulable CU]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;

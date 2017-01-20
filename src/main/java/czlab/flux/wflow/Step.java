@@ -10,8 +10,8 @@
 
 package czlab.flux.wflow;
 
-import czlab.xlib.RunnableWithId;
-import czlab.xlib.Interruptable;
+import czlab.jasal.RunnableWithId;
+import czlab.jasal.Interruptable;
 
 /**
  * @author Kenneth Leung

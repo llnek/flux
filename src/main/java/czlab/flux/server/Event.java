@@ -10,7 +10,7 @@
 
 package czlab.flux.server;
 
-import czlab.xlib.Identifiable;
+import czlab.jasal.Identifiable;
 
 /**
  * @author Kenneth Leung

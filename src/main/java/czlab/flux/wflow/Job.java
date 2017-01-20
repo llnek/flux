@@ -12,10 +12,10 @@ package czlab.flux.wflow;
 
 import czlab.flux.server.ServerLike;
 import czlab.flux.server.Event;
-import czlab.xlib.Debuggable;
-import czlab.xlib.Gettable;
-import czlab.xlib.Identifiable;
-import czlab.xlib.Settable;
+import czlab.jasal.Debuggable;
+import czlab.jasal.Gettable;
+import czlab.jasal.Identifiable;
+import czlab.jasal.Settable;
 
 /**
  * @author Kenneth Leung
