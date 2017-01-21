@@ -16,25 +16,22 @@
         [czlab.basal.core]
         [clojure.test])
 
-  (:import [czlab.flux.server ServerLike]
+  (:import [czlab.jasal Activable Schedulable CU]
            [czlab.flux.wflow
             Step
             Job
             StepError
             BoolExpr
             RangeExpr
-            ChoiceExpr]
-           [czlab.jasal Activable Schedulable CU]))
+            ChoiceExpr]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- mksvr
   ""
-  ^ServerLike
+  ^Schedulable
   []
-  (let [_c (scheduler<> "test")]
-    (.activate _c {})
-    (reify ServerLike (core [_] _c))))
+  (doto (scheduler<> "test") (.activate nil)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -54,7 +51,7 @@
   (.execWith ws job)
   (pause 3000)
   (println "dispose")
-  (.dispose (.core svr))))
+  (.dispose svr)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -85,7 +82,7 @@
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 3000)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :z)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -110,7 +107,7 @@
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 3000)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :z)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -134,7 +131,7 @@
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 2500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :a)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -154,7 +151,7 @@
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 1500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :a)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -174,7 +171,7 @@
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 1500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :a)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -195,7 +192,7 @@
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 2500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :z)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -216,7 +213,7 @@
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 2500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :z)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -240,7 +237,7 @@
     (.setv job :z 0)
     (.execWith ws job)
     (pause 2500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :z)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -264,7 +261,7 @@
     (.setv job :cnt 0)
     (.execWith ws job)
     (pause 2500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (.getv job :cnt)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -285,7 +282,7 @@
     (.setv job :time -1)
     (.execWith ws job)
     (pause 2500)
-    (.dispose (.core svr))
+    (.dispose svr)
     (- (.getv job :time) now)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

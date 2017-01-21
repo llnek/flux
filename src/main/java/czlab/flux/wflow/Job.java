@@ -10,12 +10,11 @@
 
 package czlab.flux.wflow;
 
-import czlab.flux.server.ServerLike;
-import czlab.flux.server.Event;
+import czlab.jasal.Identifiable;
 import czlab.jasal.Debuggable;
 import czlab.jasal.Gettable;
-import czlab.jasal.Identifiable;
 import czlab.jasal.Settable;
+import czlab.jasal.Schedulable;
 
 /**
  * @author Kenneth Leung
@@ -34,13 +33,13 @@ public interface Job extends Gettable , Settable, Identifiable, Debuggable {
   public Object lastResult() ;
 
   /**/
-  public ServerLike server();
+  public Schedulable scheduler();
 
   /**/
   public void clear();
 
   /**/
-  public Event event() ;
+  public Object origin() ;
 
   /**/
   public WorkStream wflow();

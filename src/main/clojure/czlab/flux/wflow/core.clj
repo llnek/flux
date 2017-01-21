@@ -20,7 +20,6 @@
 
   (:import [java.util.concurrent.atomic AtomicInteger]
            [java.util TimerTask]
-           [czlab.flux.server Event ServerLike]
            [czlab.flux.wflow
             Switch
             Delay
@@ -62,15 +61,13 @@
   [^Step s]
   (some-> s
           (.job )
-          (.server )
-          (.core )
+          (.scheduler )
           (.reschedule s)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmacro ^:private gcpu
-  "Get the core"
-  [^Job job] `(.core (.server ~job)))
+  "Get the core" [^Job job] `(.scheduler ~job))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -890,9 +887,9 @@
   ""
   {:tag Job}
 
-  ([_server ws] (job<> _server ws nil))
-  ([_server] (job<> _server nil nil))
-  ([^ServerLike _server ^WorkStream ws ^Event evt]
+  ([_sch ws] (job<> _sch ws nil))
+  ([_sch] (job<> _sch nil nil))
+  ([^Schedulable _sch ^WorkStream ws evt]
    (let [jslast (keyword Job/JS_LAST)
          data (muble<>)
          jid (str "job#" (seqint2))]
@@ -916,9 +913,9 @@
        (clear [_]
          (.clear data))
 
-       (server [_] _server)
+       (scheduler [_] _sch)
 
-       (event [_] evt)
+       (origin [_] evt)
 
        (id [_] jid)
 
@@ -944,7 +941,7 @@
   [^WorkStream ws
    ^Job job]
   (.setv job :wflow ws)
-  (-> (.core (.server job))
+  (-> (.scheduler job)
       (.run (-> (.head ws)
                 (.create (nihilStep<> job))))))
 
