@@ -318,6 +318,7 @@
 
   (is (string? "That's all folks!")))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;EOF
 
-;;(clojure.test/run-tests 'czlab.test.flux.wflow.test)
 

@@ -59,10 +59,7 @@
 (defn- rerun!
   ""
   [^Step s]
-  (some-> s
-          (.job )
-          (.scheduler )
-          (.reschedule s)))
+  (some-> s .job .scheduler (.reschedule s)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -87,8 +84,7 @@
   "Fork off tasks"
   [^Schedulable cpu ^Step nx defs]
   (doseq [t defs]
-    (.run cpu
-          (.create ^TaskDef t nx))))
+    (.run cpu (. ^TaskDef t create nx))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -96,7 +92,7 @@
   "Set alarm"
   [^Schedulable cpu ^Step step job wsecs]
   (when (spos? wsecs)
-    (.alarm cpu step job (* 1000 wsecs))))
+    (. cpu alarm step job (* 1000 wsecs))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -191,7 +187,7 @@
 (defn- stepRunAfter
   ""
   [^Step this]
-  (if (some? this)
+  (if this
     (let [cpu (gcpu (.job this))]
       (if
         (inst? Nihil (.proto this))
@@ -381,7 +377,7 @@
                   choices]}
           (:vars @info)
           m (.choose cexpr job)
-          a (if (some? m)
+          a (if m
               (some #(if
                        (= m (first %1))
                        (last %1) nil) choices) nil)]
@@ -493,9 +489,9 @@
            (number? forks)
            (when (== forks
                      (-> ^AtomicInteger cnt
-                         (.incrementAndGet )))
+                         .incrementAndGet ))
              ;;children all returned
-             (if (some? alarm)
+             (if alarm
                (.cancel ^TimerTask alarm))
              (ri! actDef this)
              (.next this))
@@ -564,12 +560,12 @@
            (number? forks)
            (let
              [rc
-              (when (some? alarm)
+              (when alarm
                 (.cancel ^TimerTask alarm)
                 (mv! info {:alarm nil})
                 nx)]
              (if (>= (-> ^AtomicInteger cnt
-                         (.incrementAndGet ))
+                         .incrementAndGet )
                      forks)
                (ri! actDef this))
              rc)
@@ -896,18 +892,18 @@
      (reify Job
 
        (contains [_ k]
-         (if (some? k)
+         (if k
            (.contains data k)))
 
        (getv [_ k]
-         (if (some? k) (.getv data k)))
+         (if k (.getv data k)))
 
        (setv [_ k v]
-         (if (some? k)
+         (if k
            (.setv data k v)))
 
        (unsetv [_ k]
-         (if (some? k)
+         (if k
            (.unsetv data k)))
 
        (clear [_]
@@ -988,8 +984,5 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;EOF
-
-
-
 
 
