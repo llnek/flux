@@ -616,7 +616,7 @@
        (let
          [{:keys [test then else]}
           (:vars @info)
-          b (.ptest ^BoolExpr test job)]
+          b (. ^BoolExpr test ptest job)]
          (ri! actDef this)
          (if b then else)))}))
 
@@ -626,16 +626,19 @@
   "Create a *if task*"
   {:tag If}
 
-  ([^BoolExpr bexpr ^TaskDef then ^TaskDef else]
+  ([bexpr ^TaskDef then ^TaskDef else]
    (reify Initable
 
      (init [this step]
        (let
-         [nx (.next ^Step step)
+         [tst (if (fn? bexpr)
+                (reify BoolExpr
+                  (ptest [_ j] (bexpr j))) bexpr)
+          nx (.next ^Step step)
           e (some-> else
                     (.create nx))
           t (.create then nx)]
-         (->> {:test bexpr
+         (->> {:test tst
                :then t
                :else e}
               (.init ^Initable step))))
@@ -661,7 +664,7 @@
     (let [{:keys [bexpr ^Step body]}
           (:vars @info)
           nx (.next this)
-          b (.ptest ^BoolExpr bexpr job)]
+          b (. ^BoolExpr bexpr ptest job)]
       (if-not b
         (do (ri! actDef this) nx)
         (if-some
@@ -702,22 +705,25 @@
 (defn wloop<>
   "Create a *while task*"
   ^While
-  [^BoolExpr bexpr ^TaskDef body]
+  [bexpr ^TaskDef body]
 
-  (reify Initable
+  (let [tst (if (fn? bexpr)
+              (reify BoolExpr
+                (ptest [_ j] (bexpr j))) bexpr)]
+    (reify Initable
 
-    (init [this step]
-      (->> {:bexpr bexpr
-            :body (.create body ^Step step)}
-           (.init ^Initable step)))
+      (init [this step]
+        (->> {:bexpr tst
+              :body (.create body ^Step step)}
+             (.init ^Initable step)))
 
-    While
+      While
 
-    (name [_] "while")
+      (name [_] "while")
 
-    (create [this nx]
-      (doto->> (stepize this nx nil)
-               (.init this)))))
+      (create [this nx]
+        (doto->> (stepize this nx nil)
+                 (.init this))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -829,8 +835,8 @@
   (let [_loop (atom 0)]
     (reify BoolExpr
       (ptest [_ j]
-        (let [w (.getv j :lowerRange)
-              u (.getv j :upperRange)
+        (let [w (.getv j :$lowerRange)
+              u (.getv j :$upperRange)
               v @_loop]
           (if (< (+ w v) u)
             (do->true
@@ -863,8 +869,8 @@
       (let [j (.job ^Step step)
             w (.lower rexpr j)
             u (.upper rexpr j)]
-        (.setv j :lowerRange w)
-        (.setv j :upperRange u)
+        (.setv j :$lowerRange w)
+        (.setv j :$upperRange u)
         (->> {:bexpr (rangeExpr)
               :body (.create body ^Step step)}
              (.init ^Initable step))))
