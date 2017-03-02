@@ -190,7 +190,7 @@
   (if this
     (let [cpu (gcpu (.job this))]
       (if
-        (inst? Nihil (.proto this))
+        (ist? Nihil (.proto this))
         (log/debug "nihil ==> stop or skip")
         (do
           (log/debug
@@ -331,7 +331,7 @@
          ;;run it
          (ri! actDef this)
          (if
-           (inst? TaskDef a)
+           (ist? TaskDef a)
            (.create ^TaskDef a nx)
            nx)))}))
 
@@ -670,14 +670,14 @@
         (if-some
           [n (.handle body job)]
           (cond
-            (inst? Delay (.proto n))
+            (ist? Delay (.proto n))
             (do (.setNext n this) n)
 
             (identical? n this)
             this
 
             ;; replace body
-            (inst? Step n)
+            (ist? Step n)
             (do
               (->> (.next body)
                    (.setNext n))
@@ -974,7 +974,7 @@
        [b (drop-last 2 args)]
        [nil args])]
     (doseq [t tasks]
-      (assert (inst? TaskDef t)))
+      (assert (ist? TaskDef t)))
     (if (fn? err)
       (reify
         WorkStream
