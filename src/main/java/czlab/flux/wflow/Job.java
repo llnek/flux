@@ -21,8 +21,6 @@ import czlab.jasal.Schedulable;
  */
 public interface Job extends Gettable , Settable, Identifiable, Debuggable {
 
-  public static final String JS_LAST = "____lastresult";
-
   /**/
   public void setLastResult(Object v) ;
 

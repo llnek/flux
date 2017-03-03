@@ -17,13 +17,7 @@
         [clojure.test])
 
   (:import [czlab.jasal Activable Schedulable CU]
-           [czlab.flux.wflow
-            Step
-            Job
-            StepError
-            BoolExpr
-            RangeExpr
-            ChoiceExpr]))
+           [czlab.flux.wflow Step Job StepError]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -38,7 +32,7 @@
 (comment
 (let [svr (mksvr)
       ws
-      (workStream<>
+      (workstream<>
         (script<> #(do->nil
                      %1 %2
                      (println "dddddddddddddddd")
@@ -59,7 +53,7 @@
   "should return 100"
   []
   (let [ws
-        (workStream<>
+        (workstream<>
           (fork<>
             {:join :and
              :waitSecs 2}
@@ -91,7 +85,7 @@
   "should return 10"
   []
   (let [ws
-        (workStream<>
+        (workstream<>
           (fork<> {:join :and}
                   (script<> #(do->nil
                                (pause 1000)
@@ -117,7 +111,7 @@
   []
 
   (let [ws
-        (workStream<>
+        (workstream<>
           (fork<> {:join :or}
                   (script<> #(do->nil
                                (pause 1000)
@@ -140,9 +134,9 @@
   "should return 10"
   []
   (let [ws
-        (workStream<>
+        (workstream<>
           (ternary<>
-            (reify BoolExpr (ptest [_ j] true))
+            #(do % true)
             (script<> #(do->nil
                          (.setv ^Job %2 :a 10)))
             (script<> #(do->nil
@@ -160,9 +154,9 @@
   "should return 10"
   []
   (let [ws
-        (workStream<>
+        (workstream<>
           (ternary<>
-            (reify BoolExpr (ptest [_ j] false))
+            #(do % false)
             (script<> #(do->nil
                          (.setv ^Job %2 :a 5)))
             (script<> #(do->nil
@@ -181,9 +175,9 @@
   []
 
   (let [ws
-        (workStream<>
+        (workstream<>
           (choice<>
-            (reify ChoiceExpr (choose [_ j] "z"))
+            #(do % "z")
             nil
             "y" (script<> #(do->nil %1 %2 ))
             "z" (script<> #(do->nil
@@ -202,9 +196,9 @@
   []
 
   (let [ws
-        (workStream<>
+        (workstream<>
           (choice<>
-            (reify ChoiceExpr (choose [_ j] "z"))
+            #(do % "z")
             (script<> #(do->nil
                          (.setv ^Job %2 :z 10)), "dft")
             "x" (script<> #(do->nil %1 %2 ))
@@ -223,11 +217,10 @@
   []
 
   (let [ws
-        (workStream<>
+        (workstream<>
           (floop<>
-            (reify RangeExpr
-              (lower [_ j] 0)
-              (upper [_ j] 10))
+            #(do % 0)
+            #(do % 10)
             (script<> #(do->nil
                          (->>
                            (inc (.getv ^Job %2 :z))
@@ -247,11 +240,9 @@
   []
 
   (let [ws
-        (workStream<>
+        (workstream<>
           (wloop<>
-            (reify BoolExpr
-              (ptest [_ j]
-                (< (.getv ^Job j :cnt) 10)))
+            #(< (.getv ^Job % :cnt) 10)
             (script<> #(do->nil
                          (->>
                            (inc (.getv ^Job %2 :cnt))
@@ -272,7 +263,7 @@
 
   (let [now (System/currentTimeMillis)
         ws
-        (workStream<>
+        (workstream<>
           (postpone<> 2)
           (script<> #(do->nil
                        (->> (System/currentTimeMillis)

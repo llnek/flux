@@ -29,6 +29,9 @@ public interface TaskDef extends Nameable {
    */
   public Step create(Step nxt);
 
+  /**
+   */
+  public Object typeid();
 
 }
 
