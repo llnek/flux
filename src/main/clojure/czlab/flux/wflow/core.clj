@@ -366,13 +366,16 @@
 (defn choice<>
   "Create a *switch task*"
   ^Switch
-  [^ChoiceExpr cexpr ^TaskDef dft & choices]
+  [cexpr ^TaskDef dft & choices]
 
   (reify Initable
 
     (init [_ step]
       (let
         [nx (. ^Step step next)
+         tst (if (fn? cexpr)
+                (reify ChoiceExpr
+                  (choose [_ j] (cexpr j))) cexpr)
          cs
          (->>
            (preduce<vec>
@@ -382,7 +385,7 @@
              (partition 2 choices))
            (partition 2))]
         (->> {:dft (some-> dft (.create nx))
-              :cexpr cexpr
+              :cexpr tst
               :choices cs}
              (.init ^Initable step))))
 
