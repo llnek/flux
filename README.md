@@ -15,7 +15,32 @@ Add the following dependency to your `project.clj` file:
 
 ## Usage
 
-Just import and use.
+```clojure
+(ns demo.app
+  :require [czlab.flux.wflow.core :as wf])
+
+  ;global scheduler
+  (def cpu (doto (scheduler<> "test") (.activate nil)))
+
+  ;fork two tasks, wait until they are done, then continue
+  (let
+    [ws
+     (workStream<>
+       (fork<> {:join :and}
+               (script<> #(do->nil
+                             (pause 1000)
+                             (.setv %2 :x 5)))
+               (script<> #(do->nil
+                             (pause 1500)
+                             (.setv %2 :y 7))))
+       (script<> 
+         #(do->nil
+             (assert (= 12 
+                        (+ (.getv %2 :x)
+                           (.getv %2 :y)))))))
+     job (job<> cpu ws)]
+   (.execWith ws job))
+```
 
 ## Contacting me / contributions
 
