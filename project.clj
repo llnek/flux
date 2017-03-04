@@ -12,6 +12,7 @@
 
   :plugins [[cider/cider-nrepl "0.14.0"]
             [lein-cprint "1.2.0"]
+            [lein-javadoc "0.3.0"]
             [lein-codox "0.10.3"]]
 
   :profiles {:provided {:dependencies
@@ -19,6 +20,9 @@
                          [net.mikera/cljunit "0.6.0" :scope "test"]
                          [junit/junit "4.12" :scope "test"]]}
              :uberjar {:aot :all}}
+
+  :javadoc-opts {:package-names ["czlab.flux"]
+                 :output-dir "docs"}
 
   :global-vars {*warn-on-reflection* true}
   :target-path "out/%s"

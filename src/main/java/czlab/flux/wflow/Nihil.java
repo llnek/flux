@@ -16,7 +16,7 @@ package czlab.flux.wflow;
  * @author Kenneth Leung
  *
  */
-public interface Nihil extends TaskDef {
+public interface Nihil extends Activity {
 
   /**/
   public Step createEx(Job j);

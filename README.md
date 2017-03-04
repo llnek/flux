@@ -2,8 +2,28 @@
 
 [![Build Status](https://travis-ci.org/llnek/flux.svg?branch=master)](https://travis-ci.org/llnek/flux)
 
-`flux` is a simple workflow engine, providing a set of `Activities` for the
-user to build workflows.
+`flux` is a *workflow* scripting framework that can be used to model business
+application processes.  The framework provides 4 basic concepts:
+
++ WorkStream
++ Activity
++ Job
++ Schedulable
+
+A `WorkStream` is a logical, sequential grouping of a list of Activities,
+also referred to as a `workflow`.
+
+A `Activity` is a **step**  within a `workflow`.  In order to better support
+the modeling of application processes, various types of control constructs
+are provided for conditonals and looping.
+
+A `Job` is the external **trigger** that starts the execution of a `workflow`,
+providing a shared `context` for all the `Activities` within a `workflow`.
+
+Any object that implements the `Schedulable` interface can be used as
+the `executor`, allowing multiple `WorkStreams`, multiple `Activities`
+to run concurrently.
+
 
 ## Installation
 
@@ -14,6 +34,23 @@ Add the following dependency to your `project.clj` file:
 ## Documentation
 
 * [API Docs](https://llnek.github.io/flux/)
+
+## Usage
+
+```clojure
+(ns demo.app 
+  (:require [czlab.flux.wflow.core :as w]
+            [czlab.basal.scheduler :as s]))
+
+  (def cpu (doto (s/scheduler<> "engine")(.activate {})))
+  (def wflow1 (w/workstream task1 task2 task3))
+  (def wflow2 (w/workstream task4 task5 task6))
+  (->> (jobCreatedFromWeb)
+       (.execWith wflow1))
+  (->> (jobCreatedFromIOT)
+       (.execWith wflow2))
+
+```
 
 ## Activities
 

@@ -26,7 +26,7 @@ public interface Step extends RunnableWithId, Interruptable {
   public void setNext(Step n);
 
   /**/
-  public TaskDef proto();
+  public Activity proto();
 
   /**/
   public Job job();

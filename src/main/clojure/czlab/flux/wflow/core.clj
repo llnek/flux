@@ -22,7 +22,7 @@
            [java.util TimerTask]
            [czlab.flux.wflow
             StepError
-            TaskDef
+            Activity
             Step
             Job
             Nihil
@@ -63,7 +63,7 @@
 (defn- fanout
   "Fork off tasks"
   [^Schedulable cpu ^Step nx defs]
-  (doseq [t defs] (. cpu run (. ^TaskDef t create nx))))
+  (doseq [t defs] (. cpu run (. ^Activity t create nx))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -87,7 +87,7 @@
 ;;
 (defmulti stepize
   "Create a Step"
-  {:private true :tag Step} (fn [a _ _] (.typeid ^TaskDef a)))
+  {:private true :tag Step} (fn [a _ _] (.typeid ^Activity a)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -189,16 +189,16 @@
        (.handle this job)
        (catch Throwable e#
          ;;if error handler returns
-         ;;a TaskDef, run it
+         ;;a Activity, run it
          (if-some
            [a
             (if-some [c (cast? Catchable ws)]
               (->> (StepError. this e#)
                    (.catche c)
-                   (cast? TaskDef))
+                   (cast? Activity))
               (do->nil (log/error e# "")))]
            (->> (nihilStep<> job)
-                (.create ^TaskDef a)))))]
+                (.create ^Activity a)))))]
     (stepRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -211,7 +211,7 @@
     [err (format "*interrupt* %s : %d secs"
                  "timer expired" waitSecs)
      ws (.wflow  job)
-     ;;if error handling returns a TaskDef
+     ;;if error handling returns a Activity
      ;;run it, else just log the error
      rc
      (if-some
@@ -219,10 +219,10 @@
         (if-some [c (cast? Catchable ws)]
           (->> (StepError. this err)
                (.catche c)
-               (cast? TaskDef))
+               (cast? Activity))
           (do->nil (log/error err "")))]
        (->> (nihilStep<> job)
-            (.create ^TaskDef a )))]
+            (.create ^Activity a )))]
     (stepRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -258,14 +258,14 @@
 ;;
 (defn postpone<>
   "Create a *delay task*"
-  ^TaskDef [delaySecs] {:pre [(spos? delaySecs)]}
+  ^Activity [delaySecs] {:pre [(spos? delaySecs)]}
 
   (reify Initable
 
     (init [_ step]
       (. ^Initable step init {:delay delaySecs}))
 
-    TaskDef
+    Activity
 
     (name [me] (name (.typeid me)))
     (typeid [_] :delay)
@@ -288,18 +288,18 @@
          [a ((get-in @info
                      [:vars :work]) _ job)
           nx (.next ^Step _)]
-         ;;do the work, if a TaskDef is returned
+         ;;do the work, if a Activity is returned
          ;;run it
          (ri! actDef _)
          (if
-           (ist? TaskDef a)
-           (.create ^TaskDef a nx)
+           (ist? Activity a)
+           (.create ^Activity a nx)
            nx)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn script<>
-  "Create a *scriptable task*" {:tag TaskDef}
+  "Create a *scriptable task*" {:tag Activity}
 
   ([workFunc] (script<> workFunc nil))
 
@@ -310,7 +310,7 @@
      (init [_ step]
        (. ^Initable step init {:work workFunc}))
 
-     TaskDef
+     Activity
 
      (name [me] (stror script-name
                        (name (.typeid me))))
@@ -344,7 +344,7 @@
 ;;
 (defn choice<>
   "Create a *switch task*"
-  ^TaskDef [cexpr ^TaskDef dft & choices] {:pre [(fn? cexpr)]}
+  ^Activity [cexpr ^Activity dft & choices] {:pre [(fn? cexpr)]}
 
   (reify Initable
 
@@ -354,7 +354,7 @@
          cs
          (->>
            (preduce<vec>
-             #(let [[k ^TaskDef t] %2]
+             #(let [[k ^Activity t] %2]
                 (-> (conj! %1 k)
                     (conj! (.create t nx))))
              (partition 2 choices))
@@ -364,7 +364,7 @@
               :choices cs}
              (.init ^Initable step))))
 
-    TaskDef
+    Activity
 
     (name [me] (name (.typeid me)))
     (typeid [_] :switch)
@@ -390,21 +390,21 @@
           nx (nihilStep<> job)
           cpu (gcpu job)]
          (doseq [t (seq bs)]
-           (->> (.create ^TaskDef t nx)
+           (->> (.create ^Activity t nx)
                 (.run cpu)))
          (.next _)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- nuljoin
-  "Create a do-nothing *join task*" ^TaskDef [branches]
+  "Create a do-nothing *join task*" ^Activity [branches]
 
   (reify Initable
 
     (init [_ step]
       (. ^Initable step init {:forks branches}))
 
-    TaskDef
+    Activity
 
     (name [me] (name (.typeid me)))
     (typeid [_] :nuljoin)
@@ -462,7 +462,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- andjoin
-  "Create a *join(and) task*" ^TaskDef [branches waitSecs]
+  "Create a *join(and) task*" ^Activity [branches waitSecs]
 
   (reify Initable
 
@@ -472,7 +472,7 @@
             :forks branches}
            (.init ^Initable step)))
 
-    TaskDef
+    Activity
 
     (name [me] (name (.typeid me)))
     (typeid [_] :andjoin)
@@ -531,7 +531,7 @@
 ;;
 (defn- orjoin
   "Create a *or join task*"
-  ^TaskDef [branches waitSecs]
+  ^Activity [branches waitSecs]
 
   (reify Initable
 
@@ -541,7 +541,7 @@
             :forks branches}
            (.init ^Initable step)))
 
-    TaskDef
+    Activity
 
     (name [me] (name (.typeid me)))
     (typeid [_] :orjoin)
@@ -570,9 +570,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn ternary<>
-  "Create a *if task*" {:tag TaskDef}
+  "Create a *if task*" {:tag Activity}
 
-  ([bexpr ^TaskDef then ^TaskDef else]
+  ([bexpr ^Activity then ^Activity else]
    (reify Initable
 
      (init [this step]
@@ -586,7 +586,7 @@
                :else e}
               (.init ^Initable step))))
 
-     TaskDef
+     Activity
 
      (name [me] (name (.typeid me)))
      (typeid [_] :if)
@@ -642,7 +642,7 @@
 ;;
 (defn wloop<>
   "Create a *while task*"
-  ^TaskDef [bexpr ^TaskDef body] {:pre [(fn? bexpr)]}
+  ^Activity [bexpr ^Activity body] {:pre [(fn? bexpr)]}
 
   (let []
     (reify Initable
@@ -652,7 +652,7 @@
               :body (.create body ^Step step)}
              (.init ^Initable step)))
 
-      TaskDef
+      Activity
 
       (name [me] (name (.typeid me)))
       (typeid [_] :while)
@@ -682,13 +682,13 @@
             (orjoin forks wait)
             :else
             (nuljoin forks))]
-         (. ^TaskDef t create (.next this))))}))
+         (. ^Activity t create (.next this))))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn fork<>
   "Create a *split task*"
-  ^TaskDef [options & branches] {:pre [(or (nil? options)
+  ^Activity [options & branches] {:pre [(or (nil? options)
                                            (map? options))]}
 
   (let [wsecs (or (:waitSecs options) 0)
@@ -703,7 +703,7 @@
               :forks branches}
              (.init ^Initable step)))
 
-      TaskDef
+      Activity
 
       (name [me] (name (.typeid me)))
       (typeid [_] :split)
@@ -727,7 +727,7 @@
           nx (.next this)]
          (if-not (empty? @cs)
            (let [a
-                 (-> ^TaskDef
+                 (-> ^Activity
                      (first @cs)
                      (.create ^Step this))
                  r (rest @cs)
@@ -740,7 +740,7 @@
 ;;
 (defn group<>
   "Create a *group task*"
-  ^TaskDef [^TaskDef a & xs] {:pre [(some? a)]}
+  ^Activity [^Activity a & xs] {:pre [(some? a)]}
 
   (reify Initable
 
@@ -748,7 +748,7 @@
       (->> {:list (atom (concat [a] xs))}
            (.init ^Initable step)))
 
-    TaskDef
+    Activity
 
     (name [me] (name (.typeid me)))
     (typeid [_] :group)
@@ -782,8 +782,8 @@
 ;;
 (defn floop<>
   "Create a *for task*"
-  ^TaskDef
-  [lower upper ^TaskDef body]
+  ^Activity
+  [lower upper ^Activity body]
   {:pre [(fn? lower)(fn? upper)]}
 
   (reify Initable
@@ -795,7 +795,7 @@
               :body (.create body ^Step step)}
              (.init ^Initable step))))
 
-    TaskDef
+    Activity
 
     (name [me] (name (.typeid me)))
     (typeid [_] :for)
@@ -872,7 +872,7 @@
   follwing syntax:
   (workstream<> taskdef [taskdef...] [:catch func])"
   ^WorkStream
-  [^TaskDef task0 & args] {:pre [(some? task0)]}
+  [^Activity task0 & args] {:pre [(some? task0)]}
 
   ;;first we look for error handling which
   ;;must be at the end of the args
@@ -884,7 +884,7 @@
        [b (drop-last 2 args)]
        [nil args])]
     (doseq [t tasks]
-      (assert (ist? TaskDef t)))
+      (assert (ist? Activity t)))
     (if (fn? err)
       (reify
         WorkStream

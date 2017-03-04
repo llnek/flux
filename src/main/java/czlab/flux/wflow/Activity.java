@@ -13,19 +13,19 @@ package czlab.flux.wflow;
 import czlab.jasal.Nameable;
 
 /**
- * An TaskDef is the building block of a workflow.
+ * An Activity is the building block of a workflow.
  *
  * @author Kenneth Leung
  *
  */
-public interface TaskDef extends Nameable {
+public interface Activity extends Nameable {
 
   /**
    * Instantiate a *runtime* version of this work unit as it becomes
    * part of the Workflow.
    *
    * @param nxt next step.
-   * @return a *runtime* version of this TaskDef.
+   * @return a *runtime* version of this Activity.
    */
   public Step create(Step nxt);
 
