@@ -10,12 +10,12 @@ application processes.  The framework provides 4 basic concepts:
 + Job
 + Schedulable
 
-A `WorkStream` is a logical, sequential grouping of a list of Activities,
+A `WorkStream` is a logical, sequential grouping of a list of `Activities`,
 also referred to as a `workflow`.
 
 A `Activity` is a **step**  within a `workflow`.  In order to better support
 the modeling of application processes, various types of control constructs
-are provided for conditonals and looping.
+are provided for conditonals and loopings.
 
 A `Job` is the external **trigger** that starts the execution of a `workflow`,
 providing a shared `context` for all the `Activities` within a `workflow`.
