@@ -314,8 +314,6 @@ Copyright © 2013-2017 Kenneth Leung
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
 
-<!--- links -->
-[1]: http://ant.apache.org/
 <!--- links (repos) -->
 [CHANGELOG]: https://github.com/llnek/flux/releases
 [GitHub issues page]: https://github.com/llnek/flux/issues
