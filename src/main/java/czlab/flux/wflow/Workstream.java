@@ -10,37 +10,19 @@
 
 package czlab.flux.wflow;
 
-import czlab.jasal.RunnableWithId;
-import czlab.jasal.Interruptable;
-
 /**
+ *
  * @author Kenneth Leung
  *
  */
-public interface Step extends RunnableWithId, Interruptable {
+public interface Workstream {
 
   /**/
-  public Step handle(Object arg);
+  public void execWith(Job j);
 
   /**/
-  public void setNext(Step n);
-
-  /**/
-  public Activity proto();
-
-  /**/
-  public Job job();
-
-  /**/
-  public Object attrs();
-
-  /**/
-  public Step next();
-
-  /**/
-  public void rerun();
+  public Activity head();
 
 }
-
 
 

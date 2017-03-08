@@ -40,7 +40,7 @@ public interface Job extends Gettable , Settable, Identifiable, Debuggable {
   public Object origin() ;
 
   /**/
-  public WorkStream wflow();
+  public Workstream wflow();
 
 }
 

@@ -19,7 +19,7 @@ package czlab.flux.wflow;
 public interface Nihil extends Activity {
 
   /**/
-  public Step createEx(Job j);
+  public Cog createEx(Job j);
 
 }
 

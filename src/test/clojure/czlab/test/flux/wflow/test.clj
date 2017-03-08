@@ -17,7 +17,7 @@
         [clojure.test])
 
   (:import [czlab.jasal Activable Schedulable CU]
-           [czlab.flux.wflow Step Job StepError]))
+           [czlab.flux.wflow Cog Job]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -68,8 +68,8 @@
                               (.getv ^Job %2 :y))
                            (.setv ^Job %2 :z ))))
           :catch
-          (fn [^StepError e]
-            (let [^Step s (.lastStep e)
+          (fn [^czlab.flux.wflow.Error e]
+            (let [^Cog s (.lastCog e)
                   j (.job s)]
               (.setv j :z 100))))
         svr (mksvr)
@@ -135,7 +135,7 @@
   []
   (let [ws
         (workstream<>
-          (ternary<>
+          (decision<>
             #(do % true)
             (script<> #(do->nil
                          (.setv ^Job %2 :a 10)))
@@ -155,7 +155,7 @@
   []
   (let [ws
         (workstream<>
-          (ternary<>
+          (decision<>
             #(do % false)
             (script<> #(do->nil
                          (.setv ^Job %2 :a 5)))

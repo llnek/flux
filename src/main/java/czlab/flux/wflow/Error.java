@@ -11,18 +11,34 @@
 package czlab.flux.wflow;
 
 /**
- *
  * @author Kenneth Leung
- *
  */
-public interface WorkStream {
+public class Error extends Exception {
+
+  private static final long serialVersionUID = 1L;
+  private Cog _cog;
 
   /**/
-  public void execWith(Job j);
+  public Error(Cog n, String msg, Throwable e) {
+    super(msg,e);
+    _cog=n;
+  }
 
   /**/
-  public Activity head();
+  public Error(Cog n, String msg) {
+    super(msg);
+    _cog=n;
+  }
+
+  /**/
+  public Error(Cog n,Throwable e) {
+    this(n, "",e);
+  }
+
+  /**/
+  public Cog lastCog() { return _cog; }
 
 }
+
 
 

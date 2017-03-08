@@ -27,7 +27,7 @@ public interface Activity extends Nameable {
    * @param nxt next step.
    * @return a *runtime* version of this Activity.
    */
-  public Step create(Step nxt);
+  public Cog create(Cog nxt);
 
   /**
    */

@@ -10,33 +10,35 @@
 
 package czlab.flux.wflow;
 
+import czlab.jasal.RunnableWithId;
+import czlab.jasal.Interruptable;
+
 /**
  * @author Kenneth Leung
+ *
  */
-public class StepError extends Exception {
-
-  private static final long serialVersionUID = 1L;
-  private Step _step;
+public interface Cog extends RunnableWithId, Interruptable {
 
   /**/
-  public StepError(Step n, String msg, Throwable e) {
-    super(msg,e);
-    _step=n;
-  }
+  public Cog handle(Object arg);
 
   /**/
-  public StepError(Step n, String msg) {
-    super(msg);
-    _step=n;
-  }
+  public void setNext(Cog n);
 
   /**/
-  public StepError(Step n,Throwable e) {
-    this(n, "",e);
-  }
+  public Activity proto();
 
   /**/
-  public Step lastStep() { return _step; }
+  public Job job();
+
+  /**/
+  public Object attrs();
+
+  /**/
+  public Cog next();
+
+  /**/
+  public void rerun();
 
 }
 
