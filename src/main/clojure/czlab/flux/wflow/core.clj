@@ -170,6 +170,10 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defmacro ^:private err! "" [c e] `(czlab.flux.wflow.Error. ~c ~e))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defn- cogRun "" [^Cog this]
   (log/debug "%s :handle()" (.. this proto name))
   (-> this .job gcpu (.dequeue this))
@@ -178,17 +182,11 @@
         rc (try
              (.handle this job)
              (catch Throwable e#
-         ;;if error handler returns
-         ;;a Activity, run it
-         (if-some
-           [a
-            (if-some [c (cast? Catchable ws)]
-              (->> (czlab.flux.wflow.Error. this e#)
-                   (.catche c)
-                   (cast? Activity))
-              (do->nil (log/error e# "")))]
-           (->> (nihilCog<> job)
-                (.create ^Activity a)))))]
+               (if-some [a (if-some [c (cast? Catchable ws)]
+                             (->> (err! this e#) (.catche c) (cast? Activity))
+                             (do->nil (log/error e# "")))]
+                 (->> (nihilCog<> job)
+                      (.create ^Activity a)))))]
     (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -196,41 +194,33 @@
 (defn- onInterrupt
   "A timer has expired - used by (joins)"
   [^Cog this ^Job job waitSecs]
-
   (let
     [err (format "*interrupt* %s : %d secs"
                  "timer expired" waitSecs)
      ws (.wflow  job)
-     ;;if error handling returns a Activity
-     ;;run it, else just log the error
-     rc
-     (if-some
-       [a
-        (if-some [c (cast? Catchable ws)]
-          (->> (czlab.flux.wflow.Error. this err)
-               (.catche c)
-               (cast? Activity))
-          (do->nil (log/error err "")))]
-       (->> (nihilCog<> job)
-            (.create ^Activity a )))]
+     rc (if-some [a (if-some [c (cast? Catchable ws)]
+                      (->> (err! this err) (.catche c) (cast? Activity))
+                      (do->nil (log/error err "")))]
+          (->> (nihilCog<> job)
+               (.create ^Activity a )))]
     (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; this is a terminal, does nothing
 (defmethod cogit!
-  :nihil [actDef nxtCog job]
+  :nihil [_ nxtCog job]
 
   (assert (nil? nxtCog))
   (assert (some? job))
-  (protoCog<> actDef nxtCog {:job job}))
+  (protoCog<> _ nxtCog {:job job}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :delay [actDef nxtCog _]
+  :delay [activity nxtCog _]
 
   (protoCog<>
-    actDef
+    activity
     nxtCog
     {:handle
      (fn [this info job]
