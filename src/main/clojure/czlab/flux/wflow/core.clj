@@ -42,7 +42,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- rerun! "" [^Cog s] (some-> s .job .scheduler (.reschedule s)))
+(defn- rerun! "" [^Cog c] (some-> c .job .scheduler (.reschedule c)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -80,28 +80,25 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmacro ^:private ri!
-  "Reset a step" [a s] `(.init ~(with-meta a {:tag 'Initable}) ~s))
+  "Reset a step" [a c] `(.init ~(with-meta a {:tag 'Initable}) ~c))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmulti stepize
+(defmulti cogit!
   "Create a Cog"
   {:private true :tag Cog} (fn [a _ _] (.typeid ^Activity a)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(declare stepRunAfter stepRun)
+(declare cogRunAfter cogRun)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- protoCog<>
-  "Generic Cog"
-  ^Cog
-  [actDef nxtCog args]
+  "" ^Cog [activity nxtCog args]
 
-  (let [info (atom {:next nxtCog
-                    :vars {}})
-        pid (str "step#" (seqint2))]
+  (let [info (atom {:next nxtCog :vars {}})
+        pid (str "cog#" (seqint2))]
     (reify Initable
 
       (init [_ m]
@@ -112,17 +109,17 @@
       Cog
 
       (setNext [_ nx] (sn! info nx))
-      (job [this]
+      (job [_]
         (or (:job args)
-            (.. this next job)))
+            (.. _ next job)))
 
-      (rerun [this] (rerun! this))
-      (run [this] (stepRun this))
+      (rerun [_] (rerun! _))
+      (run [_] (cogRun _))
 
       (attrs [_] (:vars @info))
       (next [_] (:next @info))
       (id [_] pid)
-      (proto [_] actDef)
+      (proto [_] activity)
 
       (interrupt [_ job]
         (if-fn?
@@ -137,7 +134,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- nihil<>
-  "A special *terminal task*" ^Nihil []
+  "Special *terminal task*" ^Nihil []
 
   (reify Initable
 
@@ -148,45 +145,39 @@
     (name [_] (name (.typeid _)))
     (typeid [_] :nihil)
 
-    (create [_ s]
-      (.createEx _ (.job s)))
+    (create [_ c]
+      (.createEx _ (.job c)))
 
     (createEx [_ j]
-      (doto->> (stepize _ nil j)
+      (doto->> (cogit! _ nil j)
                (.init _ )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- stepRunAfter "" [^Cog s]
-  (if s
-    (let [cpu (gcpu (.job s))]
-      (if
-        (ist? Nihil (.proto s))
-        (log/debug "nihil ==> stop or skip")
-        (do
-          (log/debug "next-to-run ==> %s" (.. s proto name))
-          (.run cpu s))))
-    (log/debug "next-to-run ==> null")))
+(defn- cogRunAfter "" [^Cog c]
+  (if-some [cpu (some-> c .job gcpu)]
+    (if (ist? Nihil (.proto c))
+      (log/debug "nihil :> stop/skip")
+      (do
+        (log/debug "next-cog :> %s"
+                   (.. c proto name))
+        (.run cpu c)))
+    (log/debug "next-cog :> null")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro ^:private nihilCog<> "" [^Job job] `(.createEx (nihil<>) ~job))
+(defmacro ^:private nihilCog<> "" [job] `(.createEx (nihil<>) ~job))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- stepRun "" [^Cog this]
-
+(defn- cogRun "" [^Cog this]
   (log/debug "%s :handle()" (.. this proto name))
-  ;;if step is queued, remove it
-  (-> (gcpu (.job this))
-      (.dequeue this))
-  (let
-    [job (.job this)
-     ws (.wflow job)
-     rc
-     (try
-       (.handle this job)
-       (catch Throwable e#
+  (-> this .job gcpu (.dequeue this))
+  (let [job (.job this)
+        ws (.wflow job)
+        rc (try
+             (.handle this job)
+             (catch Throwable e#
          ;;if error handler returns
          ;;a Activity, run it
          (if-some
@@ -198,7 +189,7 @@
               (do->nil (log/error e# "")))]
            (->> (nihilCog<> job)
                 (.create ^Activity a)))))]
-    (stepRunAfter rc)))
+    (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -222,11 +213,11 @@
           (do->nil (log/error err "")))]
        (->> (nihilCog<> job)
             (.create ^Activity a )))]
-    (stepRunAfter rc)))
+    (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; this is a terminal, does nothing
-(defmethod stepize
+(defmethod cogit!
   :nihil [actDef nxtCog job]
 
   (assert (nil? nxtCog))
@@ -235,7 +226,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :delay [actDef nxtCog _]
 
   (protoCog<>
@@ -270,12 +261,12 @@
     (typeid [_] :delay)
 
     (create [_ nx]
-      (doto->> (stepize _ nx nil)
+      (doto->> (cogit! _ nx nil)
                (.init _ )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :script [actDef nxtCog _]
 
   (protoCog<>
@@ -316,12 +307,12 @@
      (typeid [_] :script)
 
      (create [_ nx]
-       (doto->> (stepize _ nx nil)
+       (doto->> (cogit! _ nx nil)
                 (.init _))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :switch [actDef nxtCog _]
 
   (protoCog<>
@@ -369,12 +360,12 @@
     (typeid [_] :switch)
 
     (create [_ nx]
-      (doto->> (stepize _ nx nil)
+      (doto->> (cogit! _ nx nil)
                (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :nuljoin
   [actDef nxtCog _]
 
@@ -409,12 +400,12 @@
     (typeid [_] :nuljoin)
 
     (create [_ nx]
-      (doto->> (stepize _ nx nil)
+      (doto->> (cogit! _ nx nil)
                (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :andjoin [actDef nxtCog _]
 
   (protoCog<>
@@ -477,12 +468,12 @@
     (typeid [_] :andjoin)
 
     (create [_ nx]
-      (doto->> (stepize _ nx nil)
+      (doto->> (cogit! _ nx nil)
                (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :orjoin [actDef nxtCog _]
 
   (protoCog<>
@@ -546,12 +537,12 @@
     (typeid [_] :orjoin)
 
     (create [_ nx]
-      (doto->> (stepize _ nx nil)
+      (doto->> (cogit! _ nx nil)
                (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :if [actDef nxtCog _]
 
   (protoCog<>
@@ -591,14 +582,14 @@
      (typeid [_] :if)
 
      (create [_ nx]
-       (doto->> (stepize _ nx nil)
+       (doto->> (cogit! _ nx nil)
                 (.init _)))))
 
   ([bexpr then] (decision<> bexpr then nil)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- stepizeLoop "" [actDef nxtCog]
+(defn- cogit!Loop "" [actDef nxtCog]
 
   (fn [^Cog this info ^Job job]
     (let [{:keys [bexpr ^Cog body]}
@@ -629,13 +620,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :while [actDef nxtCog _]
 
   (protoCog<>
     actDef
     nxtCog
-    {:handle (stepizeLoop actDef nxtCog)}))
+    {:handle (cogit!Loop actDef nxtCog)}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -657,12 +648,12 @@
       (typeid [_] :while)
 
       (create [_ nx]
-        (doto->> (stepize _ nx nil)
+        (doto->> (cogit! _ nx nil)
                  (.init _))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :split [actDef nxtCog _]
 
   (protoCog<>
@@ -687,8 +678,7 @@
 ;;
 (defn fork<>
   "Create a *split task*"
-  ^Activity [options & branches] {:pre [(or (nil? options)
-                                           (map? options))]}
+  ^Activity [options & branches] {:pre [(some? options)]}
 
   (let [wsecs (or (:waitSecs options) 0)
         cnt (count branches)
@@ -708,12 +698,12 @@
       (typeid [_] :split)
 
       (create [_ nx]
-        (doto->> (stepize _ nx nil)
+        (doto->> (cogit! _ nx nil)
                  (.init _))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :group [actDef nxtCog _]
 
   (protoCog<>
@@ -753,7 +743,7 @@
     (typeid [_] :group)
 
     (create [_ nx]
-      (doto->> (stepize _ nx nil)
+      (doto->> (cogit! _ nx nil)
                (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -769,13 +759,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod stepize
+(defmethod cogit!
   :for [actDef nxtCog _]
 
   (protoCog<>
     actDef
     nxtCog
-    {:handle (stepizeLoop actDef nxtCog)}))
+    {:handle (cogit!Loop actDef nxtCog)}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -800,7 +790,7 @@
     (typeid [_] :for)
 
     (create [_ nx]
-      (doto->> (stepize _ nx nil)
+      (doto->> (cogit! _ nx nil)
                (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -895,6 +885,12 @@
         Workstream
         (execWith [_ j] (wsExec _ j))
         (head [_] (wsHead task0 tasks))))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn fnToScript
+  "Wrap function into a script"
+  ^Activity [func] {:pre [(fn? func)]} (script<> func))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;EOF
