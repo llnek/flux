@@ -19,14 +19,9 @@
         [czlab.basal.meta]
         [czlab.basal.str])
 
-  (:import [java.util.concurrent.atomic AtomicInteger]
+  (:import [czlab.flux.wflow Activity Cog Job Nihil Workstream]
+           [java.util.concurrent.atomic AtomicInteger]
            [java.util TimerTask]
-           [czlab.flux.wflow
-            Activity
-            Cog
-            Job
-            Nihil
-            Workstream]
            [czlab.jasal
             Interruptable
             Identifiable
@@ -40,16 +35,14 @@
 ;;(set! *warn-on-reflection* true)
 (def ^:private js-last :$lastresult)
 (def range-index :$rangeindex)
-(declare script<>)
+(declare cogRunAfter cogRun script<>)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- wrapa "" ^Activity [x]
   (cond
-    (ist? Activity x)
-    x
-    (fn? x)
-    (script<> x)
+    (instance? Activity x) x
+    (fn? x) (script<> x)
     :else
     (throwBadArg "bad param type: "
                  (if (nil? x) "null" (class x)))))
@@ -60,54 +53,57 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- rerun! "" [^Cog c] (some-> c .job .scheduler (.reschedule c)))
+(defn- rerun! "" [^Cog c] (some-> c
+                                  .job
+                                  .scheduler (.reschedule c)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmacro ^:private gcpu
-  "Get the core" [job] `(.scheduler ~(with-meta job {:tag 'Job})))
+  "" [job] `(.scheduler ~(with-meta job {:tag 'Job})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro ^:private sv! "Set vars" [info vs] `(swap! ~info assoc :vars ~vs))
+(defmacro ^:private sv!
+  "Set vars" [info vs] `(swap! ~info assoc :vars ~vs))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- mv! "Merge vars" [info m] (->> (merge (:vars @info) m) (sv! info )))
+(defn- mv!
+  "Merge vars" [info m]
+  (->> (merge (:vars @info) m) (sv! info )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- fanout
   "Fork off tasks"
-  [^Schedulable cpu ^Cog nx defs]
-  (doseq [t defs] (. cpu run (. ^Activity t create nx))))
+  [^Schedulable cpu nx defs]
+  (doseq [t defs] (. cpu run (wrapc t nx))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- sa!
   "Set alarm"
-  [^Schedulable cpu ^Cog step job wsecs]
-  (if (spos? wsecs) (. cpu alarm step job (* 1000 wsecs))))
+  [^Schedulable cpu ^Cog c job wsecs]
+  (if (spos? wsecs) (. cpu alarm c job (* 1000 wsecs))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmacro ^:private sn!
   "Set next step pointer" [info nx]
-  `(let [t# ~nx] (assert (some? t#)) (swap! ~info assoc :next t#)))
+  `(let [t# ~nx]
+     (assert (some? t#)) (swap! ~info assoc :next t#)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- ri! "Reset a cog" [^Cog c] (-> ^Initable (.proto c) (.init c)))
+(defn- ri!
+  "Reset a cog" [^Cog c] (-> ^Initable (.proto c) (.init c)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmulti cogit!
   "Create a Cog"
   {:private true :tag Cog} (fn [a _ _] (.typeid ^Activity a)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(declare cogRunAfter cogRun)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -151,7 +147,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- nihil<>
-  "Special *terminal task*" ^Nihil []
+  "Special *terminal activity*" ^Nihil []
 
   (reify Initable
 
@@ -166,8 +162,7 @@
       (.createEx _ (.job c)))
 
     (createEx [_ j]
-      (doto->> (cogit! _ nil j)
-               (.init _ )))))
+      (doto->> (cogit! _ nil j) (.init _ )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -202,8 +197,7 @@
                (if-some [a (if-some [c (cast? Catchable ws)]
                              (->> (err! this e#) (.catche c) (cast? Activity))
                              (do->nil (log/error e# "")))]
-                 (->> (nihilCog<> job)
-                      (.create ^Activity a)))))]
+                 (wrapc a (nihilCog<> job)))))]
     (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -214,12 +208,11 @@
   (let
     [err (format "*interrupt* %s : %d secs"
                  "timer expired" waitSecs)
-     ws (.wflow  job)
+     ws (.wflow job)
      rc (if-some [a (if-some [c (cast? Catchable ws)]
                       (->> (err! this err) (.catche c) (cast? Activity))
                       (do->nil (log/error err "")))]
-          (->> (nihilCog<> job)
-               (.create ^Activity a )))]
+          (wrapc a (nihilCog<> job)))]
     (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -240,9 +233,8 @@
     {:action
      (fn [^Cog this info job]
        (do->nil
-         (let
-           [nx (.next this)
-            cpu (gcpu job)]
+         (let [nx (.next this)
+               cpu (gcpu job)]
            (->> (or (get-in @info
                             [:vars :delay]) 0)
                 (* 1000)
@@ -267,8 +259,7 @@
     (typeid [_] :delay)
 
     (create [_ nx]
-      (doto->> (cogit! _ nx nil)
-               (.init _ )))))
+      (doto->> (cogit! _ nx nil) (.init _ )))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -333,8 +324,7 @@
              a (if-some [m (cexpr job)]
                  (some #(if
                           (= m (first %1))
-                          (last %1))
-                       (partition 2 choices)))]
+                          (last %1)) (partition 2 choices)))]
          (ri! _)
          (or a dft)))}
     (protoCog<> activity nxtCog)))
@@ -374,29 +364,25 @@
       (typeid [_] :switch)
 
       (create [_ nx]
-        (doto->> (cogit! _ nx nil)
-                 (.init _))))))
+        (doto->> (cogit! _ nx nil) (.init _))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
   :nuljoin
-  [actDef nxtCog _]
+  [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
+  ;;spawn all children and ends
+  (->>
     {:action
-     (fn [^Cog _ info job]
-       ;;spawn all children and goto next
-       (let
-         [bs (get-in @info [:vars :forks])
-          nx (nihilCog<> job)
-          cpu (gcpu job)]
-         (doseq [t (seq bs)]
-           (->> (.create ^Activity t nx)
-                (.run cpu)))
-         (.next _)))}))
+     (fn [^Cog c info job]
+       (let [nx (nihilCog<> job)
+             cpu (gcpu job)]
+         (doseq [t (get-in @info
+                           [:vars :forks])]
+           (.run cpu (wrapc t nx)))
+         (.next c)))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -405,8 +391,9 @@
 
   (reify Initable
 
-    (init [_ step]
-      (. ^Initable step init {:forks branches}))
+    (init [_ c]
+      (->> {:forks (mapv #(wrapa %) branches)}
+           (. ^Initable c init )))
 
     Activity
 
@@ -414,22 +401,20 @@
     (typeid [_] :nuljoin)
 
     (create [_ nx]
-      (doto->> (cogit! _ nx nil)
-               (.init _)))))
+      (doto->> (cogit! _ nx nil) (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :andjoin [actDef nxtCog _]
+  :andjoin [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
+  (->>
     {:interrupt
      (fn [_ info job]
        (log/warn "and-join time out")
        (mv! info {:error true})
-       (->> (get-in @info [:vars :wait])
+       (->> (get-in @info
+                    [:vars :wait])
             (onInterrupt _ job)))
      :action
      (fn [^Cog this info job]
@@ -461,7 +446,8 @@
                   (sa! cpu this job wait)
                   :forks (count forks)}
                  (mv! info)))
-             (.next this)))))}))
+             (.next this)))))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -470,147 +456,137 @@
 
   (reify Initable
 
-    (init [_ step]
+    (init [_ c]
       (->> {:cnt (AtomicInteger. 0)
             :wait waitSecs
-            :forks branches}
-           (.init ^Initable step)))
+            :forks (mapv #(wrapa %) branches)}
+           (.init ^Initable c)))
 
     Activity
 
-    (name [me] (name (.typeid me)))
+    (name [_] (name (.typeid _)))
     (typeid [_] :andjoin)
 
     (create [_ nx]
-      (doto->> (cogit! _ nx nil)
-               (.init _)))))
+      (doto->> (cogit! _ nx nil) (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :orjoin [actDef nxtCog _]
+  :orjoin [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
+  (->>
     {:interrupt
      (fn [_ info job]
        (log/debug "or-join time out")
        (mv! info {:error true})
-       (->> (get-in @info [:vars :wait])
+       (->> (get-in @info
+                    [:vars :wait])
             (onInterrupt _ job)))
      :action
      (fn [^Cog this info job]
-       (let
-         [{:keys [forks alarm error
-                  wait cnt]}
-          (:vars @info)
-          cpu (gcpu job)
-          nx (.next this)]
+       (let [{:keys [forks alarm
+                     error wait cnt]}
+             (:vars @info)
+             cpu (gcpu job)
+             nx (.next this)]
          (cond
            (true? error)
            nil
            (number? forks)
-           (let
-             [rc
-              (when alarm
-                (.cancel ^TimerTask alarm)
-                (mv! info {:alarm nil})
-                nx)]
+           (let [rc
+                 (when alarm
+                   (.cancel ^TimerTask alarm)
+                   (mv! info {:alarm nil})
+                   nx)]
              (if (>= (-> ^AtomicInteger cnt
-                         .incrementAndGet )
-                     forks)
+                         .incrementAndGet ) forks)
                (ri! this))
              rc)
            :else
-           (do
-             (fanout cpu this forks)
-             (->>
-               {:alarm (sa! cpu this job wait)
-                :forks (count forks) }
-               (mv! info))
-             (if (empty? forks) nx)))))}))
+           (if-not (empty? forks)
+             (do->nil
+               (fanout cpu this forks)
+               (->>
+                 {:alarm
+                  (sa! cpu this job wait)
+                  :forks (count forks)}
+                 (mv! info)))
+             (.next this)))))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- orjoin
-  "Create a *or join task*"
+  "Create a *or join activity*"
   ^Activity [branches waitSecs]
 
   (reify Initable
 
-    (init [_ step]
+    (init [_ c]
       (->> {:cnt (AtomicInteger. 0)
             :wait waitSecs
-            :forks branches}
-           (.init ^Initable step)))
+            :forks (mapv #(wrapa %) branches)}
+           (.init ^Initable c)))
 
     Activity
 
-    (name [me] (name (.typeid me)))
+    (name [_] (name (.typeid _)))
     (typeid [_] :orjoin)
 
     (create [_ nx]
-      (doto->> (cogit! _ nx nil)
-               (.init _)))))
+      (doto->> (cogit! _ nx nil) (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :if [actDef nxtCog _]
+  :decision [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
+  (->>
     {:action
-     (fn [_ info job]
-       (let
-         [{:keys [bexpr then else]}
-          (:vars @info)
-          b (bexpr job)]
-         (ri! _)
-         (if b then else)))}))
+     (fn [^Cog c info job]
+       (let [{:keys [bexpr
+                     then else]}
+             (:vars @info)
+             nx (.next c)
+             b (bexpr job)]
+         (ri! c)
+         (if b
+           (wrapc then nx)
+           (wrapc else nx))))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn decision<>
-  "Create a *if task*" {:tag Activity}
+  "Create a *decision activity*" {:tag Activity}
 
-  ([bexpr ^Activity then ^Activity else]
+  ([bexpr then else]
    (reify Initable
 
-     (init [this step]
-       (let
-         [nx (.next ^Cog step)
-          e (some-> else
-                    (.create nx))
-          t (.create then nx)]
-         (->> {:bexpr bexpr
-               :then t
-               :else e}
-              (.init ^Initable step))))
+     (init [this c]
+       (->> {:bexpr bexpr :then then :else else}
+            (.init ^Initable c)))
 
      Activity
 
-     (name [me] (name (.typeid me)))
-     (typeid [_] :if)
+     (name [_] (name (.typeid _)))
+     (typeid [_] :decision)
 
      (create [_ nx]
-       (doto->> (cogit! _ nx nil)
-                (.init _)))))
+       (doto->> (cogit! _ nx nil) (.init _)))))
 
   ([bexpr then] (decision<> bexpr then nil)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- cogit!Loop "" [actDef nxtCog]
+(defn- cogit!Loop "" [_ nxtCog]
 
-  (fn [^Cog this info ^Job job]
+  (fn [^Cog this info job]
     (let [{:keys [bexpr ^Cog body]}
           (:vars @info)
-          nx (.next this)
-          b (bexpr job)]
-      (if-not b
+          nx (.next this)]
+      (if-not (bexpr job)
         (do (ri! this) nx)
         (if-some
           [n (.handle body job)]
@@ -621,7 +597,7 @@
             (identical? n this)
             this
 
-            ;; replace body
+            ;;replace body
             (ist? Cog n)
             (do
               (->> (.next body)
@@ -635,181 +611,166 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :while [actDef nxtCog _]
+  :while [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
-    {:action (cogit!Loop actDef nxtCog)}))
+  (->> {:action (cogit!Loop activity nxtCog)}
+       (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn wloop<>
-  "Create a *while task*"
-  ^Activity [bexpr ^Activity body] {:pre [(fn? bexpr)]}
+  "Create a *while-loop activity*"
+  ^Activity [bexpr body] {:pre [(fn? bexpr)]}
 
-  (let []
-    (reify Initable
+  (reify Initable
 
-      (init [_ step]
-        (->> {:bexpr bexpr
-              :body (.create body ^Cog step)}
-             (.init ^Initable step)))
+    (init [_ c]
+      (->> {:bexpr bexpr
+            :body (wrapc body c)}
+           (.init ^Initable c)))
 
-      Activity
+    Activity
 
-      (name [me] (name (.typeid me)))
-      (typeid [_] :while)
+    (name [_] (name (.typeid _)))
+    (typeid [_] :while)
 
-      (create [_ nx]
-        (doto->> (cogit! _ nx nil)
-                 (.init _))))))
+    (create [_ nx]
+      (doto->> (cogit! _ nx nil) (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :split [actDef nxtCog _]
+  :split [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
+  (->>
     {:action
      (fn [^Cog this info job]
-       (let
-         [{:keys [joinStyle wait forks]}
-          (:vars @info)
-          t
-          (cond
-            (= :and joinStyle)
-            (andjoin forks wait)
-            (= :or joinStyle)
-            (orjoin forks wait)
-            :else
-            (nuljoin forks))]
-         (. ^Activity t create (.next this))))}))
+       (let [{:keys [joinStyle wait forks]}
+             (:vars @info)
+             t (cond
+                 (= :and joinStyle)
+                 (andjoin forks wait)
+                 (= :or joinStyle)
+                 (orjoin forks wait)
+                 :else
+                 (nuljoin forks))]
+         (wrapc t (.next this))))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn fork<>
-  "Create a *split task*"
+  "Create a *split activity*"
   ^Activity [options & branches] {:pre [(some? options)]}
 
-  (let [wsecs (or (:waitSecs options) 0)
-        cnt (count branches)
-        merger (or (:join options) :nil)]
-    (log/debug "forking with [%d] branches" cnt)
+  (let []
+    (log/debug "forking with [%d] branches" (count branches))
     (reify Initable
 
-      (init [_ step]
-        (->> {:joinStyle merger
-              :wait wsecs
-              :forks branches}
-             (.init ^Initable step)))
+      (init [_ c]
+        (->> {:forks (mapv #(wrapa %) branches)
+              :wait (or (:waitSecs options) 0)
+              :joinStyle
+              (if (keyword? options)
+                options (or (:join options) :nil))}
+             (.init ^Initable c)))
 
       Activity
 
-      (name [me] (name (.typeid me)))
+      (name [_] (name (.typeid _)))
       (typeid [_] :split)
 
       (create [_ nx]
-        (doto->> (cogit! _ nx nil)
-                 (.init _))))))
+        (doto->> (cogit! _ nx nil) (.init _))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :group [actDef nxtCog _]
+  :group [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
+  (->>
     {:action
-     (fn [^Cog this info ^Job job]
-       (let
-         [cs (get-in @info [:vars :list])
+     (fn [^Cog this info job]
+       (let [cs (get-in @info
+                        [:vars :list])
           nx (.next this)]
          (if-not (empty? @cs)
-           (let [a
-                 (-> ^Activity
-                     (first @cs)
-                     (.create ^Cog this))
+           (let [a (wrapc (first @cs) this)
                  r (rest @cs)
                  rc (.handle a job)]
              (reset! cs r)
              rc)
-           (do (ri! this) nx))))}))
+           (do (ri! this) nx))))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn group<>
-  "Create a *group task*"
-  ^Activity [^Activity a & xs] {:pre [(some? a)]}
+  "Create a *group activity*"
+  ^Activity [a & xs] {:pre [(some? a)]}
 
   (reify Initable
 
-    (init [_ step]
-      (->> {:list (atom (concat [a] xs))}
-           (.init ^Initable step)))
+    (init [_ c]
+      (->> {:list (atom (mapv #(wrapa %)
+                              (concat [a] xs)))}
+           (.init ^Initable c)))
 
     Activity
 
-    (name [me] (name (.typeid me)))
+    (name [_] (name (.typeid _)))
     (typeid [_] :group)
 
     (create [_ nx]
-      (doto->> (cogit! _ nx nil)
-               (.init _)))))
+      (doto->> (cogit! _ nx nil) (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- rangeExpr "" [lower upper]
-  (let [_loop (atom 0)]
-    #(let [v @_loop]
-       (if (< (+ lower v) upper)
+  (let [loopy (atom lower)]
+    #(let [v @loopy]
+       (if (< v upper)
          (do->true
            (. ^Job % setv range-index v)
-           (swap! _loop inc))
+           (swap! loopy inc))
          false))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :for [actDef nxtCog _]
+  :for [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
-    {:action (cogit!Loop actDef nxtCog)}))
+  (->> {:action (cogit!Loop activity nxtCog)}
+       (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn floop<>
-  "Create a *for task*"
-  ^Activity
-  [lower upper ^Activity body]
+  "Create a *for-loop activity*"
+  ^Activity [lower upper body]
   {:pre [(fn? lower)(fn? upper)]}
 
   (reify Initable
 
-    (init [_ step]
-      (let [j (.job ^Cog step)]
+    (init [_ c]
+      (let [j (.job ^Cog c)]
         (->> {:bexpr (rangeExpr (lower j)
                                 (upper j))
-              :body (.create body ^Cog step)}
-             (.init ^Initable step))))
+              :body (wrapc body c)}
+             (.init ^Initable c))))
 
     Activity
 
-    (name [me] (name (.typeid me)))
+    (name [_] (name (.typeid _)))
     (typeid [_] :for)
 
     (create [_ nx]
-      (doto->> (cogit! _ nx nil)
-               (.init _)))))
+      (doto->> (cogit! _ nx nil) (.init _)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn job<> "" {:tag Job}
+(defn job<>
+  "Create a job context" {:tag Job}
 
   ([_sch ws] (job<> _sch ws nil))
   ([_sch] (job<> _sch nil nil))
@@ -859,9 +820,9 @@
   "" [^Workstream ws ^Job job]
 
   (.setv job :$wflow ws)
-  (-> (.scheduler job)
-      (.run (-> (.head ws)
-                (.create (nihilCog<> job))))))
+  (. (.scheduler job)
+     run
+     (wrapc (.head ws) (nihilCog<> job))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -875,8 +836,7 @@
   follwing syntax:
   (workstream<> taskdef [taskdef...] [:catch func])"
   ^Workstream
-  [^Activity task0 & args] {:pre [(some? task0)]}
-
+  [task0 & args] {:pre [(some? task0)]}
   ;;first we look for error handling which
   ;;must be at the end of the args
   (let
@@ -886,8 +846,6 @@
               (fn? b))
        [b (drop-last 2 args)]
        [nil args])]
-    (doseq [t tasks]
-      (assert (ist? Activity t)))
     (if (fn? err)
       (reify
         Workstream
@@ -902,7 +860,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn fnToScript
+(defn wrapScript
   "Wrap function into a script"
   ^Activity [func] {:pre [(fn? func)]} (script<> func))
 
