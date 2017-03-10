@@ -16,6 +16,7 @@
             [clojure.string :as cs])
 
   (:use [czlab.basal.core]
+        [czlab.basal.meta]
         [czlab.basal.str])
 
   (:import [java.util.concurrent.atomic AtomicInteger]
@@ -39,6 +40,23 @@
 ;;(set! *warn-on-reflection* true)
 (def ^:private js-last :$lastresult)
 (def range-index :$rangeindex)
+(declare script<>)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- wrapa "" ^Activity [x]
+  (cond
+    (ist? Activity x)
+    x
+    (fn? x)
+    (script<> x)
+    :else
+    (throwBadArg "bad param type: "
+                 (if (nil? x) "null" (class x)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn- wrapc "" ^Cog [x nxt] (-> (wrapa x) (.create nxt)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -79,8 +97,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro ^:private ri!
-  "Reset a step" [a c] `(.init ~(with-meta a {:tag 'Initable}) ~c))
+(defn- ri! "Reset a cog" [^Cog c] (-> ^Initable (.proto c) (.init c)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -128,7 +145,7 @@
 
       (handle [_ job]
         (if-fn?
-          [f (:handle args)]
+          [f (:action args)]
           (f _ info job))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -175,7 +192,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- cogRun "" [^Cog this]
-  (log/debug "%s :handle()" (.. this proto name))
+  (log/debug "%s :action()" (.. this proto name))
   (-> this .job gcpu (.dequeue this))
   (let [job (.job this)
         ws (.wflow job)
@@ -219,35 +236,34 @@
 (defmethod cogit!
   :delay [activity nxtCog _]
 
-  (protoCog<>
-    activity
-    nxtCog
-    {:handle
-     (fn [this info job]
+  (->>
+    {:action
+     (fn [^Cog this info job]
        (do->nil
          (let
-           [nx (.next ^Cog this)
+           [nx (.next this)
             cpu (gcpu job)]
            (->> (or (get-in @info
                             [:vars :delay]) 0)
                 (* 1000)
                 (.postpone cpu nx))
-           (ri! actDef this))))}))
+           (ri! this))))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn postpone<>
-  "Create a *delay task*"
+  "Create a *delay activity*"
   ^Activity [delaySecs] {:pre [(spos? delaySecs)]}
 
   (reify Initable
 
-    (init [_ step]
-      (. ^Initable step init {:delay delaySecs}))
+    (init [_ c]
+      (. ^Initable c init {:delay delaySecs}))
 
     Activity
 
-    (name [me] (name (.typeid me)))
+    (name [_] (name (.typeid _)))
     (typeid [_] :delay)
 
     (create [_ nx]
@@ -257,29 +273,32 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :script [actDef nxtCog _]
+  :script [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
-    {:handle
-     (fn [_ info job]
+  (->>
+    {:action
+     (fn [^Cog c info job]
        (let
-         [a ((get-in @info
-                     [:vars :work]) _ job)
-          nx (.next ^Cog _)]
-         ;;do the work, if a Activity is returned
-         ;;run it
-         (ri! actDef _)
-         (if
-           (ist? Activity a)
-           (.create ^Activity a nx)
-           nx)))}))
+         [{:keys [work arity]}
+          (get-in @info [:vars])
+          a
+          (cond
+            (contains? arity 2) (work c job)
+            (contains? arity 1) (work job)
+            :else
+            (throwBadArg "Expected %s: on %s"
+                         "arity 2 or 1" (class work)))
+          nx (.next c)]
+         (ri! c)
+         (if-some [a' (cast? Activity a)]
+                  (.create a' nx)
+                  nx)))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn script<>
-  "Create a *scriptable task*" {:tag Activity}
+  "Create a *scriptable activity*" {:tag Activity}
 
   ([workFunc] (script<> workFunc nil))
 
@@ -287,13 +306,14 @@
    {:pre [(fn? workFunc)]}
    (reify Initable
 
-     (init [_ step]
-       (. ^Initable step init {:work workFunc}))
+     (init [_ c]
+       (let [[s _] (countArity workFunc)]
+         (. ^Initable c init {:work workFunc :arity s})))
 
      Activity
 
-     (name [me] (stror script-name
-                       (name (.typeid me))))
+     (name [_] (stror script-name
+                       (name (.typeid _))))
      (typeid [_] :script)
 
      (create [_ nx]
@@ -303,55 +323,59 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :switch [actDef nxtCog _]
+  :switch [activity nxtCog _]
 
-  (protoCog<>
-    actDef
-    nxtCog
-    {:handle
+  (->>
+    {:action
      (fn [_ info job]
-       (let
-         [{:keys [cexpr dft choices]}
-          (:vars @info)
-          a (if-some [m (cexpr job)]
-              (some #(if
-                       (= m (first %1))
-                       (last %1)) choices))]
-         (ri! actDef _)
-         (or a dft)))}))
+       (let [{:keys [cexpr dft choices]}
+             (:vars @info)
+             a (if-some [m (cexpr job)]
+                 (some #(if
+                          (= m (first %1))
+                          (last %1))
+                       (partition 2 choices)))]
+         (ri! _)
+         (or a dft)))}
+    (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn choice<>
-  "Create a *switch task*"
-  ^Activity [cexpr ^Activity dft & choices] {:pre [(fn? cexpr)]}
+  "Create a *choice activity*"
+  ^Activity [cexpr dft & choices]
+  {:pre [(fn? cexpr)
+         (or (empty? choices)
+             (even? (count choices)))]}
 
-  (reify Initable
+  (let [choices (preduce<vec>
+                  #(let [[k v] %2]
+                     (-> (conj! %1 k)
+                         (conj! (wrapa v))))
+                  (partition 2 choices))
+        dft (some-> dft wrapa)]
+    (reify Initable
 
-    (init [_ step]
-      (let
-        [nx (.next ^Cog step)
-         cs
-         (->>
-           (preduce<vec>
-             #(let [[k ^Activity t] %2]
-                (-> (conj! %1 k)
-                    (conj! (.create t nx))))
-             (partition 2 choices))
-           (partition 2))]
-        (->> {:dft (some-> dft (.create nx))
-              :cexpr cexpr
-              :choices cs}
-             (.init ^Initable step))))
+      (init [_ c]
+        (let [nx (.next ^Cog c)]
+          (->> {:dft (some-> dft (wrapc nx))
+                :cexpr cexpr
+                :choices
+                (preduce<vec>
+                  #(let [[k v] %2]
+                     (-> (conj! %1 k)
+                         (conj! (wrapc v nx))))
+                  (partition 2 choices)) }
+               (.init ^Initable c))))
 
-    Activity
+      Activity
 
-    (name [me] (name (.typeid me)))
-    (typeid [_] :switch)
+      (name [me] (name (.typeid me)))
+      (typeid [_] :switch)
 
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil)
-               (.init _)))))
+      (create [_ nx]
+        (doto->> (cogit! _ nx nil)
+                 (.init _))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -362,7 +386,7 @@
   (protoCog<>
     actDef
     nxtCog
-    {:handle
+    {:action
      (fn [^Cog _ info job]
        ;;spawn all children and goto next
        (let
@@ -407,7 +431,7 @@
        (mv! info {:error true})
        (->> (get-in @info [:vars :wait])
             (onInterrupt _ job)))
-     :handle
+     :action
      (fn [^Cog this info job]
        (let
          [{:keys [forks alarm
@@ -425,7 +449,7 @@
              ;;children all returned
              (if alarm
                (.cancel ^TimerTask alarm))
-             (ri! actDef this)
+             (ri! this)
              (.next this))
 
            :else
@@ -475,7 +499,7 @@
        (mv! info {:error true})
        (->> (get-in @info [:vars :wait])
             (onInterrupt _ job)))
-     :handle
+     :action
      (fn [^Cog this info job]
        (let
          [{:keys [forks alarm error
@@ -496,7 +520,7 @@
              (if (>= (-> ^AtomicInteger cnt
                          .incrementAndGet )
                      forks)
-               (ri! actDef this))
+               (ri! this))
              rc)
            :else
            (do
@@ -538,13 +562,13 @@
   (protoCog<>
     actDef
     nxtCog
-    {:handle
+    {:action
      (fn [_ info job]
        (let
          [{:keys [bexpr then else]}
           (:vars @info)
           b (bexpr job)]
-         (ri! actDef _)
+         (ri! _)
          (if b then else)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -587,7 +611,7 @@
           nx (.next this)
           b (bexpr job)]
       (if-not b
-        (do (ri! actDef this) nx)
+        (do (ri! this) nx)
         (if-some
           [n (.handle body job)]
           (cond
@@ -616,7 +640,7 @@
   (protoCog<>
     actDef
     nxtCog
-    {:handle (cogit!Loop actDef nxtCog)}))
+    {:action (cogit!Loop actDef nxtCog)}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -649,7 +673,7 @@
   (protoCog<>
     actDef
     nxtCog
-    {:handle
+    {:action
      (fn [^Cog this info job]
        (let
          [{:keys [joinStyle wait forks]}
@@ -699,7 +723,7 @@
   (protoCog<>
     actDef
     nxtCog
-    {:handle
+    {:action
      (fn [^Cog this info ^Job job]
        (let
          [cs (get-in @info [:vars :list])
@@ -713,7 +737,7 @@
                  rc (.handle a job)]
              (reset! cs r)
              rc)
-           (do (ri! actDef this) nx))))}))
+           (do (ri! this) nx))))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -755,7 +779,7 @@
   (protoCog<>
     actDef
     nxtCog
-    {:handle (cogit!Loop actDef nxtCog)}))
+    {:action (cogit!Loop actDef nxtCog)}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
