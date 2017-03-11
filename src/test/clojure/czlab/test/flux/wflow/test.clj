@@ -16,36 +16,12 @@
         [czlab.basal.core]
         [clojure.test])
 
-  (:import [czlab.jasal Activable Schedulable CU]
+  (:import [czlab.jasal Schedulable CU]
            [czlab.flux.wflow Cog Job]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- mksvr
-  ""
-  ^Schedulable
-  []
-  (doto (scheduler<> "test") (.activate nil)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(comment
-(let [svr (mksvr)
-      ws
-      (workstream<>
-        (script<> #(do->nil
-                     %1 %2
-                     (println "dddddddddddddddd")
-                     ))
-        (script<> #(do->nil
-                     %1 %2
-                     (println "ffffffffffffffff")
-                     )))
-      job (job<> svr ws)]
-  (.execWith ws job)
-  (pause 3000)
-  (println "dispose")
-  (.dispose svr)))
+(defn- mksvr "" ^Schedulable [] (doto (scheduler<> "test") .activate))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -57,25 +33,23 @@
           (fork<>
             {:join :and
              :waitSecs 2}
-            (script<> #(do->nil
-                         (pause 1000)
-                         (.setv ^Job %2 :x 5)))
-            (script<> #(do->nil
-                         (pause 4500)
-                         (.setv ^Job %2 :y 5))))
-          (script<> #(do->nil
-                      (->> (+ (.getv ^Job %2 :x)
-                              (.getv ^Job %2 :y))
-                           (.setv ^Job %2 :z ))))
+            #(do->nil (pause 1000)
+                      (.setv ^Job % :x 5))
+            #(do->nil (pause 4500)
+                      (.setv ^Job % :y 5)))
+          #(do->nil
+             (->> (+ (.getv ^Job % :x)
+                     (.getv ^Job % :y))
+                  (.setv ^Job % :z)))
           :catch
           (fn [^czlab.flux.wflow.Error e]
-            (let [^Cog s (.lastCog e)
+            (let [s (.lastCog e)
                   j (.job s)]
               (.setv j :z 100))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (pause 3000)
+    (pause 2500)
     (.dispose svr)
     (.getv job :z)))
 
@@ -86,21 +60,19 @@
   []
   (let [ws
         (workstream<>
-          (fork<> {:join :and}
-                  (script<> #(do->nil
-                               (pause 1000)
-                               (.setv ^Job %2 :x 5)))
-                  (script<> #(do->nil
-                               (pause 1500)
-                               (.setv ^Job %2 :y 5))))
-          (script<> #(do->nil
-                       (->> (+ (.getv ^Job %2 :x)
-                               (.getv ^Job %2 :y))
-                            (.setv ^Job %2 :z )))))
+          (fork<> :and
+                  #(do->nil (pause 1000)
+                            (.setv ^Job % :x 5))
+                  #(do->nil (pause 1500)
+                            (.setv ^Job % :y 5)))
+          #(do->nil
+             (->> (+ (.getv ^Job % :x)
+                            (.getv ^Job % :y))
+                         (.setv ^Job % :z))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (pause 3000)
+    (pause 3500)
     (.dispose svr)
     (.getv job :z)))
 
@@ -109,22 +81,18 @@
 (defn- testWFlowSplit->Or
   "should return 10"
   []
-
   (let [ws
         (workstream<>
-          (fork<> {:join :or}
-                  (script<> #(do->nil
-                               (pause 1000)
-                               (.setv ^Job %2 :a 10)))
-                  (script<> #(do->nil
-                               (pause 5000)
-                               (.setv ^Job %2 :b 5))))
-          (script<> #(do->nil
-                       (assert (.contains ^Job %2 :a)))))
+          (fork<> :or
+                  #(do->nil (pause 1000)
+                            (.setv ^Job % :a 10))
+                  #(do->nil (pause 3500)
+                            (.setv ^Job % :b 5)))
+          #(do->nil (assert (.contains ^Job % :a))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
-    (pause 2500)
+    (pause 2000)
     (.dispose svr)
     (.getv job :a)))
 
@@ -137,10 +105,8 @@
         (workstream<>
           (decision<>
             #(do % true)
-            (script<> #(do->nil
-                         (.setv ^Job %2 :a 10)))
-            (script<> #(do->nil
-                         (.setv ^Job %2 :a 5)))))
+            #(do->nil (.setv ^Job % :a 10))
+            #(do->nil (.setv ^Job % :a 5))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
@@ -157,8 +123,7 @@
         (workstream<>
           (decision<>
             #(do % false)
-            (script<> #(do->nil
-                         (.setv ^Job %2 :a 5)))
+            #(do->nil (.setv ^Job % :a 5))
             (script<> #(do->nil
                          (.setv ^Job %2 :a 10)))))
         svr (mksvr)
@@ -170,18 +135,14 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- testWFlowSwitch->found
-  ""
-  []
-
+(defn- testWFlowSwitch->found "" []
   (let [ws
         (workstream<>
           (choice<>
             #(do % "z")
             nil
             "y" (script<> #(do->nil %1 %2 ))
-            "z" (script<> #(do->nil
-                             (.setv ^Job %2 :z 10)))))
+            "z" #(do->nil (.setv ^Job % :z 10))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
@@ -191,18 +152,15 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- testWFlowSwitch->default
-  ""
-  []
-
+(defn- testWFlowSwitch->default "" []
   (let [ws
         (workstream<>
           (choice<>
             #(do % "z")
             (script<> #(do->nil
-                         (.setv ^Job %2 :z 10)), "dft")
-            "x" (script<> #(do->nil %1 %2 ))
-            "y" (script<> #(do->nil %1 %2 ))))
+                         (.setv ^Job % :z 10)), "dft")
+            "x" #(do->nil %1 %2 )
+            "y" #(do->nil %1 %2 )))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
@@ -215,7 +173,6 @@
 (defn- testWFlowFor
   "should return 10"
   []
-
   (let [ws
         (workstream<>
           (floop<>
@@ -223,8 +180,8 @@
             #(do % 10)
             (script<> #(do->nil
                          (->>
-                           (inc (.getv ^Job %2 :z))
-                           (.setv ^Job %2 :z ))))))
+                           (inc (.getv ^Job % :z))
+                           (.setv ^Job % :z ))))))
         svr (mksvr)
         job (job<> svr ws)]
     (.setv job :z 0)
@@ -238,7 +195,6 @@
 (defn- testWFlowWhile
   "should return 10"
   []
-
   (let [ws
         (workstream<>
           (wloop<>
@@ -260,14 +216,12 @@
 (defn- testWFlowDelay
   "should return "
   []
-
   (let [now (System/currentTimeMillis)
         ws
         (workstream<>
           (postpone<> 2)
-          (script<> #(do->nil
-                       (->> (System/currentTimeMillis)
-                            (.setv ^Job %2 :time)))))
+          #(do->nil (->> (System/currentTimeMillis)
+                         (.setv ^Job % :time))))
         svr (mksvr)
         job (job<> svr ws)]
     (.setv job :time -1)
