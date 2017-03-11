@@ -21,7 +21,7 @@ public interface Workstream {
   public void execWith(Job j);
 
   /**/
-  public Activity head();
+  public Object head();
 
 }
 
