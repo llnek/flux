@@ -19,8 +19,14 @@
         [czlab.basal.meta]
         [czlab.basal.str])
 
-  (:import [czlab.flux.wflow Activity Cog Job Nihil Workstream]
-           [java.util.concurrent.atomic AtomicInteger]
+  (:import [java.util.concurrent.atomic AtomicInteger]
+           [czlab.flux.wflow
+            CogError
+            Activity
+            Cog
+            Job
+            Nihil
+            Workstream]
            [java.util TimerTask]
            [czlab.jasal
             Interruptable
@@ -182,7 +188,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro ^:private err! "" [c e] `(czlab.flux.wflow.Error. ~c ~e))
+(defmacro ^:private err! "" [c e] `(CogError. ~c ~e))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;

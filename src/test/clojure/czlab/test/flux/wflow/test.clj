@@ -17,7 +17,7 @@
         [clojure.test])
 
   (:import [czlab.jasal Schedulable CU]
-           [czlab.flux.wflow Cog Job]))
+           [czlab.flux.wflow CogError Cog Job]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -42,7 +42,7 @@
                      (.getv ^Job % :y))
                   (.setv ^Job % :z)))
           :catch
-          (fn [^czlab.flux.wflow.Error e]
+          (fn [^CogError e]
             (let [s (.lastCog e)
                   j (.job s)]
               (.setv j :z 100))))

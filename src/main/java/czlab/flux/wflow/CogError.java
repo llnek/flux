@@ -13,25 +13,25 @@ package czlab.flux.wflow;
 /**
  * @author Kenneth Leung
  */
-public class Error extends Exception {
+public class CogError extends Exception {
 
   private static final long serialVersionUID = 1L;
   private Cog _cog;
 
   /**/
-  public Error(Cog n, String msg, Throwable e) {
+  public CogError(Cog n, String msg, Throwable e) {
     super(msg,e);
     _cog=n;
   }
 
   /**/
-  public Error(Cog n, String msg) {
+  public CogError(Cog n, String msg) {
     super(msg);
     _cog=n;
   }
 
   /**/
-  public Error(Cog n,Throwable e) {
+  public CogError(Cog n,Throwable e) {
     this(n, "",e);
   }
 
