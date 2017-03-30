@@ -30,7 +30,7 @@
            [java.util TimerTask]
            [czlab.jasal
             Interruptable
-            Identifiable
+            Idable
             Catchable
             Initable
             Nameable

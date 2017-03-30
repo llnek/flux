@@ -10,7 +10,7 @@
 
 package czlab.flux.wflow;
 
-import czlab.jasal.Identifiable;
+import czlab.jasal.Idable;
 import czlab.jasal.Debuggable;
 import czlab.jasal.Gettable;
 import czlab.jasal.Settable;
@@ -19,7 +19,7 @@ import czlab.jasal.Schedulable;
 /**
  * @author Kenneth Leung
  */
-public interface Job extends Gettable , Settable, Identifiable, Debuggable {
+public interface Job extends Gettable , Settable, Idable, Debuggable {
 
   /**/
   public void setLastResult(Object v) ;
