@@ -20,13 +20,6 @@
         [czlab.basal.str])
 
   (:import [java.util.concurrent.atomic AtomicInteger]
-           [czlab.flux.wflow
-            CogError
-            Activity
-            Cog
-            Job
-            Nihil
-            Workstream]
            [java.util TimerTask]
            [czlab.jasal
             Interruptable
@@ -45,9 +38,10 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- wrapa "" ^Activity [x]
+(defn- wrapa ""
+  ^czlab.flux.wflow.xapi.IActivity [x]
   (cond
-    (instance? Activity x) x
+    (satisfies? czlab.flux.wflow.xapi.IActivity x) x
     (fn? x) (script<> x)
     :else
     (throwBadArg "bad param type: "
@@ -55,18 +49,23 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- wrapc "" ^Cog [x nxt] (-> (wrapa x) (.create nxt)))
+(defn- wrapc ""
+  ^czlab.flux.wflow.xapi.ICog
+  [x nxt] (-> (wrapa x) (.createCog nxt)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- rerun! "" [^Cog c] (some-> c
-                                  .job
-                                  .scheduler (.reschedule c)))
+(defn- rerun!
+  "" [^czlab.flux.wflow.xapi.ICog cog]
+  (if-some [s (some-> cog
+                      .job
+                      .deref
+                      :$scheduler)]
+    (. ^Schedulable s reschedule cog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmacro ^:private gcpu
-  "" [job] `(.scheduler ~(with-meta job {:tag 'Job})))
+(defmacro ^:private gcpu "" [job] `(:$scheduler @~job))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -77,21 +76,25 @@
 ;;
 (defn- mv!
   "Merge vars" [info m]
-  (->> (merge (:vars @info) m) (sv! info )))
+  (->> (merge (:vars @info) m) (sv! info)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- fanout
   "Fork off tasks"
   [^Schedulable cpu nx defs]
-  (doseq [t defs] (. cpu run (wrapc t nx))))
+  (doseq [t defs] (. cpu
+                     run
+                     ^RunnableWithId (wrapc t nx))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- sa!
   "Set alarm"
-  [^Schedulable cpu ^Cog c job wsecs]
-  (if (spos? wsecs) (. cpu alarm c job (* 1000 wsecs))))
+  [^Schedulable cpu
+   ^Interruptable cog job wsecs]
+  (if (spos? wsecs)
+    (. cpu alarm cog job (* 1000 wsecs))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -103,83 +106,108 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- ri!
-  "Reset a cog" [^Cog c] (-> ^Initable (.proto c) (.init c)))
+  "Reset a cog" [cog]
+  (-> ^Initable (:proto @cog) (.init cog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmulti cogit!
   "Create a Cog"
-  {:private true :tag Cog} (fn [a _ _] (.typeid ^Activity a)))
+  {:private true
+   :tag czlab.flux.wflow.xapi.ICog} (fn [a _ _] (:typeid @a)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- protoCog<>
-  "" ^Cog [activity nxtCog args]
+(defstateful Cog
 
-  (let [info (atom {:next nxtCog :vars {}})
-        pid (str "cog#" (seqint2))]
-    (reify Initable
+  czlab.flux.wflow.xpi.ICog
 
-      (init [_ m]
-        (if-fn? [f (:initFn args)]
-          (f _ info m)
-          (sv! info (or m {}))))
+  (handle [_ job]
+    (if-fn? [f (:action @data)]
+      (f _ info job)))
 
-      Cog
+  (job [_]
+    (if-some [n (:next @data)]
+      (.job ^czlab.flux.wflow.xpi.ICog n)
+      (:job @data)))
 
-      (setNext [_ nx] (sn! info nx))
-      (job [_]
-        (or (:job args)
-            (.. _ next job)))
+  (rerun [_] (rerun! _))
 
-      (rerun [_] (rerun! _))
-      (run [_] (cogRun _))
+  RunnableWithId
 
-      (attrs [_] (:vars @info))
-      (next [_] (:next @info))
-      (id [_] pid)
-      (proto [_] activity)
+  (run [_] (cogRun _))
+  (id [_] (:id @data))
 
-      (interrupt [_ job]
-        (if-fn?
-          [f (:interrupt args)]
-          (f _ info job)))
+  ;;(attrs [_] (:vars @info))
+  ;;(next [_] (:next @info))
+  ;;(proto [_] activity)
 
-      (handle [_ job]
-        (if-fn?
-          [f (:action args)]
-          (f _ info job))))))
+  Interruptable
+
+  (interrupt [_ job]
+    (if-fn? [f (:interrupt @data)]
+      (f _ data job)))
+
+  Initable
+
+  (init [me m]
+    (if-fn? [f (:initFn @data)]
+      (f _ data m)
+      (-> {:vars (or m {})}
+          (.update me)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defn protoCog<>
+  "" [activity nxtCog args]
+  (entity<> Cog
+            (merge args
+                   {:id (str "cog#" (seqint2))
+                    :proto activity
+                    :next nxtCog
+                    :vars nil})))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defstateful Nihil
+
+  czlab.flux.wflow.xpi.Activity
+  (create [_ cog]
+    (.createEx _ (.job cog)))
+
+  Nameable
+  (name [_] (name (:typeid @data)))
+
+  Initable
+  (init [_ m] )
+
+  czlab.flux.wflow.core.INihil
+
+  (createCogEx [me job]
+    (doto->> (cogit! me nil job)
+             (.init ^Initable me ))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- nihil<>
-  "Special *terminal activity*" ^Nihil []
-
-  (reify Initable
-
-    (init [_ m] )
-
-    Nihil
-
-    (name [_] (name (.typeid _)))
-    (typeid [_] :nihil)
-
-    (create [_ c]
-      (.createEx _ (.job c)))
-
-    (createEx [_ j]
-      (doto->> (cogit! _ nil j) (.init _ )))))
+  "Special *terminal activity*"
+  ^czlab.flux.wflow.xpi.INihil
+  []
+  (entity<> Nihil
+            {:typeid ::nihil}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- cogRunAfter "" [^Cog c]
-  (if-some [cpu (some-> c .job gcpu)]
-    (if (ist? Nihil (.proto c))
+(defn- cogRunAfter
+  "" [^czlab.flux.wflow.xpi.ICog cog]
+  (if-some [cpu (some-> cog .job gcpu)]
+    (if (satisfies?
+          czlab.flux.wflow.xpi.INihil (:proto @cog))
       (log/debug "nihil :> stop/skip")
       (do
         (log/debug "next-cog :> %s"
-                   (.. c proto name))
-        (.run cpu c)))
+                   (.name ^Nameable (:proto @cog)))
+        (.run cpu cog)))
     (log/debug "next-cog :> null")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -192,39 +220,49 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- cogRun "" [^Cog this]
-  (log/debug "%s :action()" (.. this proto name))
+(defn- cogRun "" [^czlab.flux.wflow.xpi.ICog this]
+  (log/debug "%s :action()"
+             (.name ^Nameable (:proto @this)))
   (-> this .job gcpu (.dequeue this))
-  (let [job (.job this)
-        ws (.wflow job)
-        rc (try
-             (.handle this job)
-             (catch Throwable e#
-               (if-some [a (if-some [c (cast? Catchable ws)]
-                             (->> (err! this e#) (.catche c) (cast? Activity))
-                             (do->nil (log/error e# "")))]
-                 (wrapc a (nihilCog<> job)))))]
+  (let
+    [job (.job this)
+     ws (:wflow @job)
+     rc (try
+          (.handle this job)
+          (catch Throwable e#
+            (if-some
+              [a (if-some
+                   [c (cast? Catchable ws)]
+                   (->> (err! this e#)
+                        (.catche c)
+                        (cast? czlab.flux.wflow.xapi.IActivity))
+                   (do->nil (log/error e# "")))]
+              (wrapc a (nihilCog<> job)))))]
     (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- onInterrupt
   "A timer has expired - used by (joins)"
-  [^Cog this ^Job job waitSecs]
+  [^czlab.flux.wflow.xpi.ICog this job waitSecs]
   (let
     [err (format "*interrupt* %s : %d secs"
                  "timer expired" waitSecs)
-     ws (.wflow job)
-     rc (if-some [a (if-some [c (cast? Catchable ws)]
-                      (->> (err! this err) (.catche c) (cast? Activity))
-                      (do->nil (log/error err "")))]
+     ws (:wflow @job)
+     rc (if-some
+          [a (if-some
+               [c (cast? Catchable ws)]
+               (->> (err! this err)
+                    (.catche c)
+                    (cast? czlab.flux.wflow.xapi.IActivity))
+               (do->nil (log/error err "")))]
           (wrapc a (nihilCog<> job)))]
     (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; this is a terminal, does nothing
 (defmethod cogit!
-  :nihil [_ nxtCog job]
+  ::nihil [_ nxtCog job]
 
   (assert (nil? nxtCog))
   (assert (some? job))
@@ -233,15 +271,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :delay [activity nxtCog _]
+  ::delay [activity nxtCog _]
 
   (->>
     {:action
-     (fn [^Cog this info job]
+     (fn [this info job]
        (do->nil
-         (let [nx (.next this)
+         (let [nx (:next @this)
                cpu (gcpu job)]
-           (->> (or (get-in @info
+           (->> (or (get-in info
                             [:vars :delay]) 0)
                 (* 1000)
                 (.postpone cpu nx))
@@ -250,34 +288,43 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defstateful Postpone
+  Initable
+  (init [_ cog]
+    (. ^Initable
+       cog
+       init {:delay (:delaySecs @data)}))
+
+  czlab.flux.wflow.xpi.IActivity
+
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _ )))
+
+  Nameable
+  (name [_] (name (:typeid @data))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defn postpone<>
   "Create a *delay activity*"
-  ^Activity [delaySecs] {:pre [(spos? delaySecs)]}
+  ^czlab.flux.wflow.xapi.IActivity [delaySecs]
+  {:pre [(spos? delaySecs)]}
 
-  (reify Initable
-
-    (init [_ c]
-      (. ^Initable c init {:delay delaySecs}))
-
-    Activity
-
-    (name [_] (name (.typeid _)))
-    (typeid [_] :delay)
-
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil) (.init _ )))))
+  (entity<> Postpone
+            {:delaySecs delaySecs
+             :typeid ::delay}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :script [activity nxtCog _]
+  ::script [activity nxtCog _]
 
   (->>
     {:action
-     (fn [^Cog c info job]
+     (fn [cog info job]
        (let
          [{:keys [work arity]}
-          (get-in @info [:vars])
+          (get-in info [:vars])
           a
           (cond
             (contains? arity 2) (work c job)
@@ -285,149 +332,176 @@
             :else
             (throwBadArg "Expected %s: on %s"
                          "arity 2 or 1" (class work)))
-          nx (.next c)]
-         (ri! c)
-         (if-some [a' (cast? Activity a)]
-                  (.create a' nx)
-                  nx)))}
+          nx (:next @cog)]
+         (ri! cog)
+         (if-some
+           [a' (cast? czlab.flux.wflow.xpi.IActivity a)]
+           (.create a' nx)
+           nx)))}
     (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defstateful Script
+  Initable
+  (init [_ cog]
+    (let [[s _] (countArity
+                  (:workFunc @data))]
+      (. ^Initable
+         cog
+         init
+         {:work workFunc :arity s})))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil)
+             (.init _)))
+
+  Nameable
+  (name [_] (stror (:scriptName @data)
+                   (name (:typeid @data)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defn script<>
-  "Create a *scriptable activity*" {:tag Activity}
+  "Create a *scriptable activity*"
+  {:tag czlab.flux.wflow.xpi.IActivity}
 
   ([workFunc] (script<> workFunc nil))
-
   ([workFunc script-name]
    {:pre [(fn? workFunc)]}
-   (reify Initable
-
-     (init [_ c]
-       (let [[s _] (countArity workFunc)]
-         (. ^Initable c init {:work workFunc :arity s})))
-
-     Activity
-
-     (name [_] (stror script-name
-                       (name (.typeid _))))
-     (typeid [_] :script)
-
-     (create [_ nx]
-       (doto->> (cogit! _ nx nil)
-                (.init _))))))
+   (entity<> Script
+             {:workFunc workFunc
+              :typeid ::script})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :switch [activity nxtCog _]
+  ::switch [activity nxtCog _]
 
   (->>
     {:action
      (fn [_ info job]
        (let [{:keys [cexpr dft choices]}
-             (:vars @info)
+             (:vars info)
              a (if-some [m (cexpr job)]
                  (some #(if
                           (= m (first %1))
-                          (last %1)) (partition 2 choices)))]
+                          (last %1))
+                       (partition 2 choices)))]
          (ri! _)
          (or a dft)))}
     (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defstateful Switch
+  Initable
+  (init [_ cog]
+    (let [{:keys [choices cexpr dft]}
+          @data
+          nx (:next @cog)]
+      (->> {:dft (some-> dft (wrapc nx))
+            :cexpr cexpr
+            :choices
+            (preduce<vec>
+              #(let [[k v] %2]
+                 (-> (conj! %1 k)
+                     (conj! (wrapc v nx))))
+              (partition 2 choices))}
+           (.init ^Initable cog))))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+
+  Nameable
+  (name [me] (name (:typeid @data))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defn choice<>
   "Create a *choice activity*"
-  ^Activity [cexpr dft & choices]
+  ^czlab.flux.wflow.xapi.IActivity
+  [cexpr dft & choices]
   {:pre [(fn? cexpr)
          (or (empty? choices)
              (even? (count choices)))]}
-
   (let [choices (preduce<vec>
                   #(let [[k v] %2]
                      (-> (conj! %1 k)
                          (conj! (wrapa v))))
                   (partition 2 choices))
         dft (some-> dft wrapa)]
-    (reify Initable
-
-      (init [_ c]
-        (let [nx (.next ^Cog c)]
-          (->> {:dft (some-> dft (wrapc nx))
-                :cexpr cexpr
-                :choices
-                (preduce<vec>
-                  #(let [[k v] %2]
-                     (-> (conj! %1 k)
-                         (conj! (wrapc v nx))))
-                  (partition 2 choices)) }
-               (.init ^Initable c))))
-
-      Activity
-
-      (name [me] (name (.typeid me)))
-      (typeid [_] :switch)
-
-      (create [_ nx]
-        (doto->> (cogit! _ nx nil) (.init _))))))
+    (entity<> Switch
+              {:choices choices
+               :cexpr cexpr
+               :dft dft
+               :typeid ::switch})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :nuljoin
+  ::nuljoin
   [activity nxtCog _]
 
-  ;;spawn all children and ends
+  ;;spawn all children and continue
   (->>
     {:action
-     (fn [^Cog c info job]
+     (fn [cog info job]
        (let [nx (nihilCog<> job)
              cpu (gcpu job)]
-         (doseq [t (get-in @info
+         (doseq [t (get-in info
                            [:vars :forks])]
            (.run cpu (wrapc t nx)))
-         (.next c)))}
+         (:next @cog)))}
     (protoCog<> activity nxtCog)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defstateful NulJoin
+  Initable
+  (init [_ cog]
+    (->> {:forks (mapv #(wrapa %) branches)}
+         (. ^Initable cog init )))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+
+  Nameable
+  (name [me] (name (:typeid @data))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defn- nuljoin
-  "Create a do-nothing *join task*" ^Activity [branches]
+  "Create a do-nothing *join task*"
+  ^czlab.flux.wflow.xapi.IActivity [branches]
 
-  (reify Initable
-
-    (init [_ c]
-      (->> {:forks (mapv #(wrapa %) branches)}
-           (. ^Initable c init )))
-
-    Activity
-
-    (name [me] (name (.typeid me)))
-    (typeid [_] :nuljoin)
-
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil) (.init _)))))
+  (entity<> NulJoin
+            {:typeid ::nuljoin
+             :branches branches}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :andjoin [activity nxtCog _]
+  ::andjoin [activity nxtCog _]
 
   (->>
     {:interrupt
-     (fn [_ info job]
+     (fn [cog info job]
        (log/warn "and-join time out")
-       (mv! info {:error true})
-       (->> (get-in @info
+       (. ^Stateful
+          cog update {:error true})
+       (->> (get-in info
                     [:vars :wait])
-            (onInterrupt _ job)))
+            (onInterrupt cog job)))
      :action
-     (fn [^Cog this info job]
+     (fn [this info job]
        (let
          [{:keys [forks alarm
                   error wait cnt]}
-          (:vars @info)
+          (:vars info)
           cpu (gcpu job)]
          (cond
            (true? error)
@@ -441,7 +515,7 @@
              (if alarm
                (.cancel ^TimerTask alarm))
              (ri! this)
-             (.next this))
+             (:next @this))
 
            :else
            (if-not (empty? forks)
@@ -451,51 +525,61 @@
                  {:alarm
                   (sa! cpu this job wait)
                   :forks (count forks)}
-                 (mv! info)))
-             (.next this)))))}
+                 (.update this )))
+             (:next @this)))))}
     (protoCog<> activity nxtCog)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defstateful Andjoin
+  Initable
+  (init [_ cog]
+    (->> {:cnt (AtomicInteger. 0)
+          :wait (:waitSecs @data)
+          :forks (mapv #(wrapa %)
+                       (:branches @data))}
+         (.init ^Initable cog)))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+
+  Nameable
+  (name [_] (name (:typeid @data))))
+    ;;(typeid [_] :andjoin)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- andjoin
-  "Create a *join(and) task*" ^Activity [branches waitSecs]
+  "Create a *join(and) task*"
+  ^czlab.flux.wflow.xapi.IActivity [branches waitSecs]
 
-  (reify Initable
-
-    (init [_ c]
-      (->> {:cnt (AtomicInteger. 0)
-            :wait waitSecs
-            :forks (mapv #(wrapa %) branches)}
-           (.init ^Initable c)))
-
-    Activity
-
-    (name [_] (name (.typeid _)))
-    (typeid [_] :andjoin)
-
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil) (.init _)))))
+  (entity<> AndJoin
+            {:branches branches
+             :waitSecs waitSecs
+             :typeid ::andjoin}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :orjoin [activity nxtCog _]
+  ::orjoin [activity nxtCog _]
 
   (->>
     {:interrupt
-     (fn [_ info job]
+     (fn [cog info job]
        (log/debug "or-join time out")
-       (mv! info {:error true})
-       (->> (get-in @info
+       (.update ^Stateful
+                cog {:error true})
+       (->> (get-in @cog
                     [:vars :wait])
             (onInterrupt _ job)))
      :action
-     (fn [^Cog this info job]
+     (fn [this info job]
        (let [{:keys [forks alarm
                      error wait cnt]}
              (:vars @info)
              cpu (gcpu job)
-             nx (.next this)]
+             nx (:next @this)]
          (cond
            (true? error)
            nil
@@ -503,7 +587,7 @@
            (let [rc
                  (when alarm
                    (.cancel ^TimerTask alarm)
-                   (mv! info {:alarm nil})
+                   (.update this {:alarm nil})
                    nx)]
              (if (>= (-> ^AtomicInteger cnt
                          .incrementAndGet ) forks)
@@ -517,46 +601,52 @@
                  {:alarm
                   (sa! cpu this job wait)
                   :forks (count forks)}
-                 (mv! info)))
-             (.next this)))))}
+                 (.update this )))
+             (:next @this)))))}
     (protoCog<> activity nxtCog)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defstateful OrJoin
+  Initable
+  (init [_ cog]
+    (->> {:cnt (AtomicInteger. 0)
+          :wait (:waitSecs @data)
+          :forks (mapv #(wrapa %)
+                       (:branches @data))}
+         (.init ^Initable cog)))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+  Nameable
+  (name [_] (name (:typeid @data))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- orjoin
   "Create a *or join activity*"
-  ^Activity [branches waitSecs]
+  ^czlab.flux.wflow.xapi.IActivity [branches waitSecs]
 
-  (reify Initable
-
-    (init [_ c]
-      (->> {:cnt (AtomicInteger. 0)
-            :wait waitSecs
-            :forks (mapv #(wrapa %) branches)}
-           (.init ^Initable c)))
-
-    Activity
-
-    (name [_] (name (.typeid _)))
-    (typeid [_] :orjoin)
-
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil) (.init _)))))
+  (entity<> OrJoin
+            {:branches branches
+             :waitSecs waitSecs
+             :typeid ::orjoin}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :decision [activity nxtCog _]
+  ::decision [activity nxtCog _]
 
   (->>
     {:action
-     (fn [^Cog c info job]
+     (fn [cog info job]
        (let [{:keys [bexpr
                      then else]}
              (:vars @info)
-             nx (.next c)
+             nx (:next @cog)
              b (bexpr job)]
-         (ri! c)
+         (ri! cog)
          (if b
            (wrapc then nx)
            (wrapc else nx))))}
@@ -564,51 +654,62 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
+(defstateful Decision
+  Initable
+  (init [this cog]
+    (->> (select-keys @data
+                      [:bexpr :then :else])
+         (.init ^Initable cog)))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+
+  Nameable
+  (name [_] (name (:typeid @data))))
+     ;;(typeid [_] :decision)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
 (defn decision<>
-  "Create a *decision activity*" {:tag Activity}
+  "Create a *decision activity*"
+  {:tag czlab.flux.wflow.xpi.IActivity}
+
+  ([bexpr then]
+   (decision<> bexpr then nil))
 
   ([bexpr then else]
-   (reify Initable
-
-     (init [this c]
-       (->> {:bexpr bexpr :then then :else else}
-            (.init ^Initable c)))
-
-     Activity
-
-     (name [_] (name (.typeid _)))
-     (typeid [_] :decision)
-
-     (create [_ nx]
-       (doto->> (cogit! _ nx nil) (.init _)))))
-
-  ([bexpr then] (decision<> bexpr then nil)))
+   (entity<> Decision
+             {:bexpr bexpr
+              :then then :else else})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- cogit!Loop "" [_ nxtCog]
 
-  (fn [^Cog this info job]
-    (let [{:keys [bexpr ^Cog body]}
+  (fn [this info job]
+    (let [{:keys [bexpr body]}
           (:vars @info)
-          nx (.next this)]
+          nx (:next @this)]
       (if-not (bexpr job)
         (do (ri! this) nx)
         (if-some
           [n (.handle body job)]
           (cond
-            (= :delay (.. n proto typeid))
-            (doto n (.setNext this))
+            (= ::delay
+               (:typeid @(:proto @n)))
+            (doto n
+              (.update {:next this}))
 
             (identical? n this)
             this
 
             ;;replace body
-            (ist? Cog n)
+            (satisfies? czlab.flux.wflow.xpi.ICog n)
             (do
-              (->> (.next body)
-                   (.setNext n))
-              (mv! info {:body n})
+              (->> {:next (:next @body)}
+                   (.update n ))
+              (.update this {:body n})
               this)
 
             :else this)
@@ -617,40 +718,47 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :while [activity nxtCog _]
+  ::while [activity nxtCog _]
 
   (->> {:action (cogit!Loop activity nxtCog)}
        (protoCog<> activity nxtCog)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defstate WhileLoop
+  Initable
+  (init [_ cog]
+    (->> {:bexpr bexpr
+          :body (wrapc body c)}
+         (.init ^Initable cog)))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+  Nameable
+  (name [_] (name (:typeid @data))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn wloop<>
   "Create a *while-loop activity*"
-  ^Activity [bexpr body] {:pre [(fn? bexpr)]}
+  ^czlab.flux.wflow.xapi.IActivity
+  [bexpr body]
+  {:pre [(fn? bexpr)]}
 
-  (reify Initable
-
-    (init [_ c]
-      (->> {:bexpr bexpr
-            :body (wrapc body c)}
-           (.init ^Initable c)))
-
-    Activity
-
-    (name [_] (name (.typeid _)))
-    (typeid [_] :while)
-
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil) (.init _)))))
+  (entity<> WhileLoop
+            {:bexpr bexpr
+             :body body
+             :typeid ::while}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :split [activity nxtCog _]
+  ::split [activity nxtCog _]
 
   (->>
     {:action
-     (fn [^Cog this info job]
+     (fn [this info job]
        (let [{:keys [joinStyle wait forks]}
              (:vars @info)
              t (cond
@@ -660,46 +768,56 @@
                  (orjoin forks wait)
                  :else
                  (nuljoin forks))]
-         (wrapc t (.next this))))}
+         (wrapc t (:next @this))))}
     (protoCog<> activity nxtCog)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defstateful Split
+
+  Initable
+  (init [_ cog]
+    (let [{:keys [branches options]} @data]
+      (->> {:forks (mapv #(wrapa %) branches)
+            :wait (or (:waitSecs options) 0)
+            :joinStyle
+            (if (keyword? options)
+              options (or (:join options) :nil))}
+           (.init ^Initable cog))))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+
+  Nameable
+  (name [_] (name (:typeid @data))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn fork<>
   "Create a *split activity*"
-  ^Activity [options & branches] {:pre [(some? options)]}
+  ^czlab.flux.wflow.xapi.IActivity
+  [options & branches]
+  {:pre [(some? options)]}
 
-  (let []
-    (log/debug "forking with [%d] branches" (count branches))
-    (reify Initable
-
-      (init [_ c]
-        (->> {:forks (mapv #(wrapa %) branches)
-              :wait (or (:waitSecs options) 0)
-              :joinStyle
-              (if (keyword? options)
-                options (or (:join options) :nil))}
-             (.init ^Initable c)))
-
-      Activity
-
-      (name [_] (name (.typeid _)))
-      (typeid [_] :split)
-
-      (create [_ nx]
-        (doto->> (cogit! _ nx nil) (.init _))))))
+  (log/debug "forking with [%d] branches" (count branches))
+  (entity<> Split
+            {:branches branches
+             :options options
+             :typeid ::split}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :group [activity nxtCog _]
+  ::group [activity nxtCog _]
 
   (->>
     {:action
-     (fn [^Cog this info job]
+     (fn [this info job]
        (let [cs (get-in @info
                         [:vars :list])
-          nx (.next this)]
+          nx (:next @this)]
          (if-not (empty? @cs)
            (let [a (wrapc (first @cs) this)
                  r (rest @cs)
@@ -709,26 +827,34 @@
            (do (ri! this) nx))))}
     (protoCog<> activity nxtCog)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defstateful Group
+  Initable
+  (init [_ cog]
+    (->> {:list (atom (mapv #(wrapa %)
+                            (concat [a] xs)))}
+         (.init ^Initable cog)))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+
+  Nameable
+  (name [_] (name (:typeid @data))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn group<>
   "Create a *group activity*"
-  ^Activity [a & xs] {:pre [(some? a)]}
+  ^czlab.flux.wflow.xapi.IActivity
+  [a & xs]
+  {:pre [(some? a)]}
 
-  (reify Initable
-
-    (init [_ c]
-      (->> {:list (atom (mapv #(wrapa %)
-                              (concat [a] xs)))}
-           (.init ^Initable c)))
-
-    Activity
-
-    (name [_] (name (.typeid _)))
-    (typeid [_] :group)
-
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil) (.init _)))))
+  (entity<> Group
+            {:xs xs
+             :a a
+             :typeid ::group}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -737,17 +863,35 @@
     #(let [v @loopy]
        (if (< v upper)
          (do->true
-           (. ^Job % setv range-index v)
+           (.update ^Job % {range-index  v})
            (swap! loopy inc))
          false))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmethod cogit!
-  :for [activity nxtCog _]
+  ::for [activity nxtCog _]
 
   (->> {:action (cogit!Loop activity nxtCog)}
        (protoCog<> activity nxtCog)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defstateful ForLoop
+  Initable
+  (init [_ cog]
+    (let [j (.job ^Cog cog)]
+      (->> {:bexpr (rangeExpr (lower j)
+                              (upper j))
+            :body (wrapc body cog)}
+           (.init ^Initable cog))))
+
+  czlab.flux.wflow.xpi.IActivity
+  (createCog [_ nx]
+    (doto->> (cogit! _ nx nil) (.init _)))
+
+  Nameable
+  (name [_] (name (:typeid @data))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -756,22 +900,10 @@
   ^Activity [lower upper body]
   {:pre [(fn? lower)(fn? upper)]}
 
-  (reify Initable
-
-    (init [_ c]
-      (let [j (.job ^Cog c)]
-        (->> {:bexpr (rangeExpr (lower j)
-                                (upper j))
-              :body (wrapc body c)}
-             (.init ^Initable c))))
-
-    Activity
-
-    (name [_] (name (.typeid _)))
-    (typeid [_] :for)
-
-    (create [_ nx]
-      (doto->> (cogit! _ nx nil) (.init _)))))
+  (entity<> ForLoop
+            {:lower lower
+             :upper upper
+             :typeid ::for}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
