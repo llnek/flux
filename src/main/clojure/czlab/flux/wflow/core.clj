@@ -36,12 +36,54 @@
 (def range-index :$rangeindex)
 (declare cogRunAfter cogRun script<>)
 
+;;(defprotocol Job
+  ;;public interface Job extends Gettable , Settable, Idable, Debuggable {
+  ;;public void setLastResult(Object v) ;
+  ;;public void clrLastResult() ;
+  ;;public Object lastResult() ;
+  ;;public Schedulable scheduler();
+  ;;public void clear();
+  ;;public Object origin() ;
+  ;;public Workstream wflow();
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defprotocol Cog ;; RunnableWithId, Interruptable
+  ""
+  (^Cog handle [_ arg] "")
+  (job [_] "")
+  (rerun [_] ""))
+
+  ;;(setNext [_ n] "") :next
+  ;;(^Activity :proto [_] "")
+  ;;(attrs [_] "")
+  ;;(^Cog next();
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defprotocol Activity
+  "An Activity is the building block of a workflow."
+  (^Cog createCog [_ nxtCog] ""))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defprotocol Nihil
+  "A nothing, nada task."
+  (^Cog createCogEx [_ job] ""))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(defprotocol Workstream
+  ""
+  (execWith [_ job] ""))
+  ;;public Object head();
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- wrapa ""
-  ^czlab.flux.wflow.xapi.IActivity [x]
+  ^czlab.flux.wflow.core.Activity [x]
   (cond
-    (satisfies? czlab.flux.wflow.xapi.IActivity x) x
+    (satisfies? czlab.flux.wflow.core.Activity x) x
     (fn? x) (script<> x)
     :else
     (throwBadArg "bad param type: "
