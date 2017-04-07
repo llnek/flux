@@ -975,8 +975,7 @@
       (entity<> WorkstreamEx
                 {::head (wsHead task0 tasks)
                  ::efn err})
-      (entity<> Workstream
-                {::head (wsHead task0 tasks)}))))
+      (entity<> Workstream {::head (wsHead task0 tasks)}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
