@@ -17,7 +17,7 @@
         [clojure.test])
 
   (:import [czlab.jasal Schedulable CU]
-           [czlab.flux.wflow CogError Cog Job]))
+           [czlab.basal Stateful]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -34,24 +34,22 @@
             {:join :and
              :waitSecs 2}
             #(do->nil (pause 1000)
-                      (.setv ^Job % :x 5))
+                      (.update ^Stateful % {:x 5}))
             #(do->nil (pause 4500)
-                      (.setv ^Job % :y 5)))
+                      (.update ^Stateful % {:y 5})))
           #(do->nil
-             (->> (+ (.getv ^Job % :x)
-                     (.getv ^Job % :y))
-                  (.setv ^Job % :z)))
+             (->> {:z (+ (:x @%) (:y @%))}
+                  (.update ^Stateful % )))
           :catch
-          (fn [^CogError e]
-            (let [s (.lastCog e)
-                  j (.job s)]
-              (.setv j :z 100))))
+          (fn [{:keys [cog error]}]
+            (let [j (gjob cog)]
+              (.update ^Stateful j {:z 100}))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 2500)
     (.dispose svr)
-    (.getv job :z)))
+    (:z @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -62,19 +60,18 @@
         (workstream<>
           (fork<> :and
                   #(do->nil (pause 1000)
-                            (.setv ^Job % :x 5))
+                            (.update ^Stateful % {:x 5}))
                   #(do->nil (pause 1500)
-                            (.setv ^Job % :y 5)))
+                            (.update ^Stateful % {:y 5})))
           #(do->nil
-             (->> (+ (.getv ^Job % :x)
-                            (.getv ^Job % :y))
-                         (.setv ^Job % :z))))
+             (->> {:z (+ (:x @%) (:y @%))}
+                  (.update ^Stateful % ))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 3500)
     (.dispose svr)
-    (.getv job :z)))
+    (:z @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -85,16 +82,16 @@
         (workstream<>
           (fork<> :or
                   #(do->nil (pause 1000)
-                            (.setv ^Job % :a 10))
+                            (.update ^Stateful % {:a 10}))
                   #(do->nil (pause 3500)
-                            (.setv ^Job % :b 5)))
-          #(do->nil (assert (.contains ^Job % :a))))
+                            (.update ^Stateful % {:b 5})))
+          #(do->nil (assert (contains? @% :a))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 2000)
     (.dispose svr)
-    (.getv job :a)))
+    (:a @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -105,14 +102,14 @@
         (workstream<>
           (decision<>
             #(do % true)
-            #(do->nil (.setv ^Job % :a 10))
-            #(do->nil (.setv ^Job % :a 5))))
+            #(do->nil (.update ^Stateful % {:a 10}))
+            #(do->nil (.update ^Stateful % {:a 5}))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 1500)
     (.dispose svr)
-    (.getv job :a)))
+    (:a @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -123,15 +120,15 @@
         (workstream<>
           (decision<>
             #(do % false)
-            #(do->nil (.setv ^Job % :a 5))
+            #(do->nil (.update ^Stateful % {:a 5}))
             (script<> #(do->nil
-                         (.setv ^Job %2 :a 10)))))
+                         (.update ^Stateful %2 {:a 10})))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 1500)
     (.dispose svr)
-    (.getv job :a)))
+    (:a @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -142,13 +139,13 @@
             #(do % "z")
             nil
             "y" (script<> #(do->nil %1 %2 ))
-            "z" #(do->nil (.setv ^Job % :z 10))))
+            "z" #(do->nil (.update ^Stateful % {:z 10}))))
         svr (mksvr)
         job (job<> svr ws)]
     (.execWith ws job)
     (pause 2500)
     (.dispose svr)
-    (.getv job :z)))
+    (:z @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -158,7 +155,7 @@
           (choice<>
             #(do % "z")
             (script<> #(do->nil
-                         (.setv ^Job % :z 10)), "dft")
+                         (.update ^Stateful % {:z 10})), "dft")
             "x" #(do->nil %1 %2 )
             "y" #(do->nil %1 %2 )))
         svr (mksvr)
@@ -166,7 +163,7 @@
     (.execWith ws job)
     (pause 2500)
     (.dispose svr)
-    (.getv job :z)))
+    (:z @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -180,15 +177,15 @@
             #(do % 10)
             (script<> #(do->nil
                          (->>
-                           (inc (.getv ^Job % :z))
-                           (.setv ^Job % :z ))))))
+                           {:z (inc (:z @%))}
+                           (.update ^Stateful % ))))))
         svr (mksvr)
         job (job<> svr ws)]
-    (.setv job :z 0)
+    (.update ^Stateful job {:z 0})
     (.execWith ws job)
     (pause 2500)
     (.dispose svr)
-    (.getv job :z)))
+    (:z @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -198,18 +195,18 @@
   (let [ws
         (workstream<>
           (wloop<>
-            #(< (.getv ^Job % :cnt) 10)
+            #(< (:cnt @%) 10)
             (script<> #(do->nil
                          (->>
-                           (inc (.getv ^Job %2 :cnt))
-                           (.setv ^Job %2 :cnt))))))
+                           {:cnt (inc (:cnt @%2))}
+                           (.update ^Stateful %2 ))))))
         svr (mksvr)
         job (job<> svr ws)]
-    (.setv job :cnt 0)
+    (.update ^Stateful job {:cnt 0})
     (.execWith ws job)
     (pause 2500)
     (.dispose svr)
-    (.getv job :cnt)))
+    (:cnt @job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -220,15 +217,15 @@
         ws
         (workstream<>
           (postpone<> 2)
-          #(do->nil (->> (System/currentTimeMillis)
-                         (.setv ^Job % :time))))
+          #(do->nil (->> {:time (System/currentTimeMillis)}
+                         (.update ^Stateful % ))))
         svr (mksvr)
         job (job<> svr ws)]
-    (.setv job :time -1)
+    (.update ^Stateful job {:time -1})
     (.execWith ws job)
     (pause 2500)
     (.dispose svr)
-    (- (.getv job :time) now)))
+    (- (:time @job) now)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
