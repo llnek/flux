@@ -36,10 +36,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defprotocol ICog ""
-  (^czlab.flux.wflow.core.ICog handle [_ arg] "")
-  (job [_] "")
-  (rerun [_] ""))
+(defprotocol IWorkstream "" (execWith [_ job] ""))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -47,12 +44,16 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defprotocol Activity ""
-  (^czlab.flux.wflow.core.ICog createCog [_ nxtCog] ""))
+(defprotocol ICog ""
+  (handle [_ arg] "")
+  (job [_] "")
+  (rerun [_] ""))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defprotocol IWorkstream "" (execWith [_ job] ""))
+(defprotocol Activity ""
+  (protoCog [_ nxtCog _] "")
+  (createCog [_ nxtCog] ""))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -106,13 +107,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmulti cogit!
-  "Create a Cog"
-  {:private true
-   :tag czlab.flux.wflow.core.ICog} (fn [a _ _] (:typeid @a)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defstateful Cog
 
   ICog
@@ -146,19 +140,20 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn protoCog<>
-  "" [activity nxtCog args]
-  (entity<> Cog
-            (merge args
-                   {:id (str "cog#" (seqint2))
-                    :proto activity
-                    :next nxtCog})))
+(defmacro ^:private protoCog<> "" [activity nxtCog args]
+  `(entity<> Cog
+             (merge ~args
+                    {:id (str "cog#" (seqint2))
+                     :proto ~activity
+                     :next ~nxtCog})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- createCogEx [nihil job]
-  (doto->> (cogit! nihil nil job)
-           (.init ^Initable nihil )))
+  (assert (some? job))
+  (doto->>
+    (protoCog<> nihil nil {:job job})
+    (.init ^Initable nihil )))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -256,33 +251,6 @@
     (cogRunAfter rc)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; this is a terminal, does nothing
-(defmethod cogit!
-  ::nihil [_ nxtCog job]
-  (assert (nil? nxtCog))
-  (assert (some? job))
-  (protoCog<> _ nxtCog {:job job}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmethod cogit!
-  ::delay [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action
-     (fn [this job]
-       (do->nil
-         (let [{:keys [next delay]}
-               @this
-               cpu (gcpu job)]
-           (->> (or delay 0)
-                (* 1000)
-                (.postpone cpu next))
-           (ri! this))))}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defstateful Postpone
 
@@ -293,8 +261,22 @@
            {:delay (:delaySecs @data)}))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action
+       (fn [cog job]
+         (do->nil
+           (let [{:keys [next delay]}
+                 @cog
+                 cpu (gcpu job)]
+             (->> (or delay 0)
+                  (* 1000)
+                  (.postpone cpu next))
+             (ri! cog))))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _ )))
+    (doto->> (.protoCog _ nx nil) (.init _ )))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -312,32 +294,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod cogit!
-  ::script [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action
-     (fn [cog job]
-       (let
-         [{:keys [next work arity]}
-          @cog
-          a
-          (cond
-            (contains? arity 2) (work c job)
-            (contains? arity 1) (work job)
-            :else
-            (throwBadArg "Expected %s: on %s"
-                         "arity 2 or 1" (class work)))]
-         (ri! cog)
-         (if-some
-           [a' (cast? czlab.flux.wflow.core.Activity a)]
-           (.createCog a' next)
-           next)))}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defstateful Script
 
   Initable
@@ -348,8 +304,29 @@
              cog {:work workFunc :arity s})))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action
+       (fn [cog job]
+         (let
+           [{:keys [next work arity]}
+            @cog
+            a
+            (cond
+              (in? arity 2) (work c job)
+              (in? arity 1) (work job)
+              :else
+              (throwBadArg "Expected %s: on %s"
+                           "arity 2 or 1" (class work)))]
+           (ri! cog)
+           (if-some
+             [a' (cast? czlab.flux.wflow.core.Activity a)]
+             (.createCog a' next)
+             next)))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (stror (:scriptname @data)
@@ -370,23 +347,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod cogit!
-  ::switch [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action
-     (fn [cog job]
-       (let [{:keys [cexpr dft choices]}
-             @cog
-             a (if-some [m (cexpr job)]
-                 (some #(if
-                          (= m (first %1))
-                          (last %1))
-                       (partition 2 choices)))]
-         (ri! cog)
-         (or a dft)))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -407,8 +367,23 @@
            (.init ^Initable cog))))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action
+       (fn [cog job]
+         (let [{:keys [cexpr dft choices]}
+               @cog
+               a (if-some [m (cexpr job)]
+                   (some #(if
+                            (= m (first %1))
+                            (last %1))
+                         (partition 2 choices)))]
+           (ri! cog)
+           (or a dft)))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -436,25 +411,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod cogit!
-  ::nuljoin [activity nxtCog _]
-
-  ;;spawn all children and continue
-  (protoCog<>
-    activity
-    nxtCog
-    {:action
-     (fn [cog job]
-       (let [{:keys [forks next]}
-             @cog
-             nx (nihilCog<> job)
-             cpu (gcpu job)]
-         (doseq [t forks]
-           (.run cpu (wrapc t nx)))
-         next))}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defstateful NulJoin
 
   Initable
@@ -463,8 +419,22 @@
          (.init ^Initable cog )))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action
+       (fn [cog job]
+         (let [{:keys [forks next]}
+               @cog
+               nx (nihilCog<> job)
+               cpu (gcpu job)]
+           ;;spawn all children and continue
+           (doseq [t forks]
+             (.run cpu (wrapc t nx)))
+           next))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -477,49 +447,6 @@
 
   (entity<> NulJoin
             {:typeid ::nuljoin :branches branches}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmethod cogit!
-  ::andjoin [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:interrupt
-     (fn [cog job]
-       (log/warn "and-join time out")
-       (.update ^Stateful
-                cog {:error true})
-       (->> (:wait @cog)
-            (onInterrupt cog job)))
-     :action
-     (fn [^Stateful this job]
-       (let
-         [{:keys [forks alarm next
-                  error wait cnt]}
-          @this
-          cpu (gcpu job)]
-         (cond
-           (true? error)
-           (do->nil (log/debug "too late"))
-           (number? forks)
-           (when (== forks
-                     (-> ^AtomicInteger cnt
-                         .incrementAndGet ))
-             ;;children all returned
-             (if alarm
-               (.cancel ^TimerTask alarm))
-             (ri! this)
-             next)
-           :else
-           (if-not (empty? forks)
-             (do->nil
-               (fanout cpu this forks)
-               (.update this
-                        {:alarm (sa! cpu this job wait)
-                         :forks (count forks)}))
-             next))))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -535,8 +462,44 @@
            (.init ^Initable cog))))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:interrupt
+       (fn [^Stateful cog job]
+         (log/warn "and-join time out")
+         (.update cog {:error true})
+         (onInterrupt cog job (:wait @cog)))
+       :action
+       (fn [^Stateful cog job]
+         (let
+           [{:keys [forks alarm next
+                    error wait cnt]}
+            @cog
+            cpu (gcpu job)]
+           (cond
+             (true? error)
+             (do->nil (log/debug "too late"))
+             (number? forks)
+             (when (== forks
+                       (-> ^AtomicInteger cnt
+                           .incrementAndGet ))
+               ;;children all returned
+               (if alarm
+                 (.cancel ^TimerTask alarm))
+               (ri! cog)
+               next)
+             :else
+             (if-not (empty? forks)
+               (do->nil
+                 (fanout cpu cog forks)
+                 (.update cog
+                          {:alarm (sa! cpu cog job wait)
+                           :forks (count forks)}))
+               next))))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -552,47 +515,6 @@
             {:branches branches
              :waitSecs waitSecs :typeid ::andjoin}))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmethod cogit!
-  ::orjoin [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:interrupt
-     (fn [^Stateful cog job]
-       (log/debug "or-join time out")
-       (.update cog {:error true})
-       (->> (:wait @cog)
-            (onInterrupt cog job)))
-     :action
-     (fn [^Stateful this job]
-       (let [{:keys [forks alarm next
-                     error wait cnt]}
-             @this
-             cpu (gcpu job)]
-         (cond
-           (true? error)
-           nil
-           (number? forks)
-           (let [_ (when alarm
-                     (.cancel ^TimerTask alarm)
-                     (.update this {:alarm nil}))
-                 rc next]
-             (if (>= (-> ^AtomicInteger cnt
-                         .incrementAndGet ) forks)
-               (ri! this))
-             rc)
-           :else
-           (if-not (empty? forks)
-             (do->nil
-               (fanout cpu this forks)
-               (.update this
-                        {:alarm (sa! cpu this job wait)
-                         :forks (count forks)}))
-             next))))}))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defstateful OrJoin
@@ -607,8 +529,43 @@
            (.init ^Initable cog))))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:interrupt
+       (fn [^Stateful cog job]
+         (log/debug "or-join time out")
+         (.update cog {:error true})
+         (onInterrupt cog job (:wait @cog)))
+       :action
+       (fn [^Stateful cog job]
+         (let [{:keys [forks alarm next
+                       error wait cnt]}
+               @cog
+               cpu (gcpu job)]
+           (cond
+             (true? error)
+             nil
+             (number? forks)
+             (let [_ (when alarm
+                       (.cancel ^TimerTask alarm)
+                       (.update cog {:alarm nil}))
+                   rc next]
+               (if (>= (-> ^AtomicInteger cnt
+                           .incrementAndGet ) forks)
+                 (ri! cog))
+               rc)
+             :else
+             (if-not (empty? forks)
+               (do->nil
+                 (fanout cpu cog forks)
+                 (.update cog
+                          {:alarm (sa! cpu cog job wait)
+                           :forks (count forks)}))
+               next))))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -626,25 +583,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod cogit!
-  ::decision [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action
-     (fn [cog job]
-       (let [{:keys [bexpr next
-                     then else]}
-             @cog
-             b (bexpr job)]
-         (ri! cog)
-         (if b
-           (wrapc then next)
-           (wrapc else next))))}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defstateful Decision
 
   Initable
@@ -654,8 +592,22 @@
          (.init ^Initable cog)))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action
+       (fn [cog job]
+         (let [{:keys [bexpr next
+                       then else]}
+               @cog
+               b (bexpr job)]
+           (ri! cog)
+           (if b
+             (wrapc then next)
+             (wrapc else next))))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -676,44 +628,34 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- cogit!Loop "" [_ nxtCog]
+(defn- cogit!Loop "" [_]
 
-  (fn [^Stateful this job]
-    (let [{:keys [bexpr body next]}
-          @this
-          nx (:next @this)]
+  (fn [^Stateful cog job]
+    (let [{:keys [bexpr
+                  body next]} @cog]
       (if-not (bexpr job)
-        (do (ri! this) next)
+        (do (ri! cog) next)
         (if-some
           [^Stateful
            n (.handle
                ^czlab.flux.wflow.core.ICog body job)]
           (cond
+            ;;you can add a pause in-between iterations
             (= ::delay (:typeid @(:proto @n)))
-            (doto n (.update {:next this}))
+            (doto n (.update {:next cog}))
 
-            (identical? n this)
-            this
+            (identical? n cog)
+            cog
 
             ;;replace body
             (satisfies? ICog n)
             (do
               (.update n {:next (:next @body)})
-              (.update this {:body n})
-              this)
+              (.update cog {:body n})
+              cog)
 
-            :else this)
-          this)))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmethod cogit!
-  ::while [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action (cogit!Loop activity nxtCog)}))
+            :else cog)
+          cog)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -728,8 +670,13 @@
            (.init ^Initable cog))))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action (cogit!Loop me)}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -747,27 +694,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod cogit!
-  ::split [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action
-     (fn [this job]
-       (let [{:keys [joinStyle wait forks]}
-             @this
-             t (cond
-                 (= :and joinStyle)
-                 (andjoin forks wait)
-                 (= :or joinStyle)
-                 (orjoin forks wait)
-                 :else
-                 (nuljoin forks))]
-         (wrapc t (:next @this))))}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defstateful Split
 
   Initable
@@ -781,8 +707,24 @@
            (.init ^Initable cog))))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action
+       (fn [cog job]
+         (let [{:keys [joinStyle wait forks]}
+               @cog
+               t (cond
+                   (= :and joinStyle)
+                   (andjoin forks wait)
+                   (= :or joinStyle)
+                   (orjoin forks wait)
+                   :else
+                   (nuljoin forks))]
+           (wrapc t (:next @cog))))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -800,26 +742,6 @@
             {:branches branches
              :options options :typeid ::split}))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defmethod cogit!
-  ::group [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action
-     (fn [this job]
-       (let [{:keys [tlist next]} @this]
-         (if-not (empty? @tlist)
-           (let [a (wrapc (first @tlist) this)
-                 r (rest @tlist)
-                 rc (.handle
-                      ^czlab.flux.wflow.core.Cog a job)]
-             (reset! tlist r)
-             rc)
-           (do (ri! this) next))))}))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defstateful Group
@@ -831,8 +753,23 @@
          (.init ^Initable cog)))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action
+       (fn [cog job]
+         (let [{:keys [tlist next]} @cog]
+           (if-not (empty? @tlist)
+             (let [a (wrapc (first @tlist) cog)
+                   r (rest @tlist)
+                   rc (.handle
+                        ^czlab.flux.wflow.core.Cog a job)]
+               (reset! tlist r)
+               rc)
+             (do (ri! cog) next))))}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
@@ -862,16 +799,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defmethod cogit!
-  ::for [activity nxtCog _]
-
-  (protoCog<>
-    activity
-    nxtCog
-    {:action (cogit!Loop activity nxtCog)}))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
 (defstateful ForLoop
 
   Initable
@@ -885,8 +812,13 @@
            (.init ^Initable cog))))
 
   Activity
+  (protoCog [me nxCog _]
+    (protoCog<>
+      me
+      nxCog
+      {:action (cogit!Loop me)}))
   (createCog [_ nx]
-    (doto->> (cogit! _ nx nil) (.init _)))
+    (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
   (name [_] (name (:typeid @data))))
