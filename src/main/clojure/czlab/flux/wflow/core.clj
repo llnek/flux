@@ -136,7 +136,7 @@
   (init [me m]
     (if-fn? [f (:initFn @data)]
       (f me m)
-      (.update me (or m {})))))
+      (alterStateful me merge m))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -469,7 +469,7 @@
       {:interrupt
        (fn [^Stateful cog job]
          (log/warn "and-join time out")
-         (.update cog {:error true})
+         (alterStateful cog assoc :error true)
          (onInterrupt cog job (:wait @cog)))
        :action
        (fn [^Stateful cog job]
@@ -494,9 +494,10 @@
              (if-not (empty? forks)
                (do->nil
                  (fanout cpu cog forks)
-                 (.update cog
-                          {:alarm (sa! cpu cog job wait)
-                           :forks (count forks)}))
+                 (alterStateful cog
+                                assoc
+                                :alarm (sa! cpu cog job wait)
+                                :forks (count forks)))
                next))))}))
   (createCog [_ nx]
     (doto->> (.protoCog _ nx nil) (.init _)))
@@ -536,7 +537,7 @@
       {:interrupt
        (fn [^Stateful cog job]
          (log/debug "or-join time out")
-         (.update cog {:error true})
+         (alterStateful cog assoc :error true)
          (onInterrupt cog job (:wait @cog)))
        :action
        (fn [^Stateful cog job]
@@ -550,7 +551,7 @@
              (number? forks)
              (let [_ (when alarm
                        (.cancel ^TimerTask alarm)
-                       (.update cog {:alarm nil}))
+                       (alterStateful cog assoc :alarm nil))
                    rc next]
                (if (>= (-> ^AtomicInteger cnt
                            .incrementAndGet ) forks)
@@ -560,9 +561,10 @@
              (if-not (empty? forks)
                (do->nil
                  (fanout cpu cog forks)
-                 (.update cog
-                          {:alarm (sa! cpu cog job wait)
-                           :forks (count forks)}))
+                 (alterStateful cog
+                                assoc
+                                :alarm (sa! cpu cog job wait)
+                                :forks (count forks)))
                next))))}))
   (createCog [_ nx]
     (doto->> (.protoCog _ nx nil) (.init _)))
@@ -642,7 +644,7 @@
           (cond
             ;;you can add a pause in-between iterations
             (= ::delay (:typeid @(:proto @n)))
-            (doto n (.update {:next cog}))
+            (alterStateful n assoc :next cog)
 
             (identical? n cog)
             cog
@@ -650,8 +652,8 @@
             ;;replace body
             (satisfies? ICog n)
             (do
-              (.update n {:next (:next @body)})
-              (.update cog {:body n})
+              (alterStateful n assoc :next (:next @body))
+              (alterStateful cog assoc :body n)
               cog)
 
             :else cog)
@@ -792,8 +794,7 @@
     #(let [v @loopy]
        (if (< v upper)
          (do->true
-           (.update ^Stateful
-                    % {::rangeindex v})
+           (alterStateful % assoc ::rangeindex v)
            (swap! loopy inc))
          false))))
 
@@ -862,7 +863,7 @@
 ;;
 (defn- wsExec "" [ws job]
 
-  (.update ^Stateful job {::wflow ws})
+  (alterStateful job assoc ::wflow ws)
   (.run ^Schedulable
         (::scheduler @job)
         (wrapc (::head @ws) (nihilCog<> job))))
