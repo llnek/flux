@@ -8,12 +8,12 @@
 
 (ns czlab.test.flux.wflow.test
 
-  (:require [czlab.flux.wflow.core :refer :all]
-            [czlab.basal.logging :as log])
+  (:require [czlab.basal.logging :as log])
 
   (:use [czlab.basal.scheduler]
         [czlab.basal.process]
         [czlab.basal.core]
+        [czlab.flux.wflow]
         [clojure.test])
 
   (:import [czlab.jasal Schedulable CU]

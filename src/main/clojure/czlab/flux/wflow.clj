@@ -9,7 +9,7 @@
 (ns ^{:doc "A minimal worflow framework."
       :author "Kenneth Leung"}
 
-  czlab.flux.wflow.core
+  czlab.flux.wflow
 
   (:require [czlab.basal.logging :as log]
             [clojure.java.io :as io]
@@ -58,7 +58,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- wrapa ""
-  ^czlab.flux.wflow.core.Activity [x]
+  ^czlab.flux.wflow.Activity [x]
   (cond
     (satisfies? Activity x) x
     (fn? x) (script<> x)
@@ -69,13 +69,13 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- wrapc ""
-  ^czlab.flux.wflow.core.ICog
+  ^czlab.flux.wflow.ICog
   [x nxt] (-> (wrapa x) (.createCog nxt)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- rerun!
-  "" [^czlab.flux.wflow.core.ICog cog]
+  "" [^czlab.flux.wflow.ICog cog]
   (if-some [j (some-> cog .job)]
     (.reschedule ^Schedulable
                  (::scheduler @j) cog)))
@@ -116,7 +116,7 @@
 
   (job [_]
     (if-some [n (:next @data)]
-      (.job ^czlab.flux.wflow.core.ICog n)
+      (.job ^czlab.flux.wflow.ICog n)
       (:job @data)))
 
   (rerun [_] (rerun! _))
@@ -158,7 +158,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn gjob
-  "" [^czlab.flux.wflow.core.ICog cog] (some-> cog .job))
+  "" [^czlab.flux.wflow.ICog cog] (some-> cog .job))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -179,13 +179,13 @@
 ;;
 (defn- nihil<>
   "*terminal activity*"
-  ^czlab.flux.wflow.core.Nihil
+  ^czlab.flux.wflow.Nihil
   [] (entity<> Nihil {:typeid ::nihil}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- cogRunAfter
-  "" [^czlab.flux.wflow.core.ICog cog]
+  "" [^czlab.flux.wflow.ICog cog]
   (if cog
     (let [{:keys [proto]} @cog
           cpu (gcpu (gjob cog))]
@@ -208,7 +208,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- cogRun "" [^czlab.flux.wflow.core.ICog this]
+(defn- cogRun "" [^czlab.flux.wflow.ICog this]
   (let
     [{:keys [proto]} @this
      job (gjob this)
@@ -226,7 +226,7 @@
                    [c (cast? Catchable ws)]
                    (->> (err! this e#)
                         (.catche c)
-                        (cast? czlab.flux.wflow.core.Activity))
+                        (cast? czlab.flux.wflow.Activity))
                    (do->nil (log/error e# "")))]
               (wrapc a (nihilCog<> job)))))]
     (cogRunAfter rc)))
@@ -235,7 +235,7 @@
 ;;
 (defn- onInterrupt
   "A timer has expired - used by (joins)"
-  [^czlab.flux.wflow.core.ICog this job waitSecs]
+  [^czlab.flux.wflow.ICog this job waitSecs]
   (let
     [err (format "*interrupt* %s : %d secs"
                  "timer expired" waitSecs)
@@ -245,7 +245,7 @@
                [c (cast? Catchable ws)]
                (->> (err! this err)
                     (.catche c)
-                    (cast? czlab.flux.wflow.core.Activity))
+                    (cast? czlab.flux.wflow.Activity))
                (do->nil (log/error err "")))]
           (wrapc a (nihilCog<> job)))]
     (cogRunAfter rc)))
@@ -285,7 +285,7 @@
 ;;
 (defn postpone<>
   "Create a *delay activity*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [delaySecs]
   {:pre [(spos? delaySecs)]}
 
@@ -322,7 +322,7 @@
                            "arity 2 or 1" (class work)))]
            (ri! cog)
            (if-some
-             [a' (cast? czlab.flux.wflow.core.Activity a)]
+             [a' (cast? czlab.flux.wflow.Activity a)]
              (.createCog a' next)
              next)))}))
   (createCog [_ nx]
@@ -336,7 +336,7 @@
 ;;
 (defn script<>
   "Create a *scriptable activity*"
-  {:tag czlab.flux.wflow.core.Activity}
+  {:tag czlab.flux.wflow.Activity}
 
   ([workFunc] (script<> workFunc nil))
   ([workFunc script-name]
@@ -392,7 +392,7 @@
 ;;
 (defn choice<>
   "Create a *choice activity*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [cexpr dft & choices]
   {:pre [(fn? cexpr)
          (or (empty? choices)
@@ -443,7 +443,7 @@
 ;;
 (defn- nuljoin
   "Create a do-nothing *join task*"
-  ^czlab.flux.wflow.core.Activity [branches]
+  ^czlab.flux.wflow.Activity [branches]
 
   (entity<> NulJoin
             {:typeid ::nuljoin :branches branches}))
@@ -509,7 +509,7 @@
 ;;
 (defn- andjoin
   "Create a *join(and) task*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [branches waitSecs]
 
   (entity<> AndJoin
@@ -576,7 +576,7 @@
 ;;
 (defn- orjoin
   "Create a *or join activity*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [branches waitSecs]
 
   (entity<> OrJoin
@@ -618,7 +618,7 @@
 ;;
 (defn decision<>
   "Create a *decision activity*"
-  {:tag czlab.flux.wflow.core.Activity}
+  {:tag czlab.flux.wflow.Activity}
 
   ([bexpr then]
    (decision<> bexpr then nil))
@@ -640,7 +640,7 @@
         (if-some
           [^Stateful
            n (.handle
-               ^czlab.flux.wflow.core.ICog body job)]
+               ^czlab.flux.wflow.ICog body job)]
           (cond
             ;;you can add a pause in-between iterations
             (= ::delay (:typeid @(:proto @n)))
@@ -687,7 +687,7 @@
 ;;
 (defn wloop<>
   "Create a *while-loop activity*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [bexpr body]
   {:pre [(fn? bexpr)]}
 
@@ -735,7 +735,7 @@
 ;;
 (defn fork<>
   "Create a *split activity*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [options & branches]
   {:pre [(some? options)]}
 
@@ -766,7 +766,7 @@
              (let [a (wrapc (first @tlist) cog)
                    r (rest @tlist)
                    rc (.handle
-                        ^czlab.flux.wflow.core.Cog a job)]
+                        ^czlab.flux.wflow.Cog a job)]
                (reset! tlist r)
                rc)
              (do (ri! cog) next))))}))
@@ -780,7 +780,7 @@
 ;;
 (defn group<>
   "Create a *group activity*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [a & xs]
   {:pre [(some? a)]}
 
@@ -828,7 +828,7 @@
 ;;
 (defn floop<>
   "Create a *for-loop activity*"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [lower upper body]
   {:pre [(fn? lower)(fn? upper)]}
 
@@ -847,7 +847,7 @@
 ;;
 (defn job<>
   "Create a job context"
-  {:tag czlab.flux.wflow.core.Job}
+  {:tag czlab.flux.wflow.Job}
 
   ([_sch ws] (job<> _sch ws nil))
   ([_sch] (job<> _sch nil nil))
@@ -893,7 +893,7 @@
   "Create a work flow with the
   follwing syntax:
   (workstream<> taskdef [taskdef...] [:catch func])"
-  ^czlab.flux.wflow.core.IWorkstream
+  ^czlab.flux.wflow.IWorkstream
   [task0 & args] {:pre [(some? task0)]}
   ;;first we look for error handling which
   ;;must be at the end of the args
@@ -914,7 +914,7 @@
 ;;
 (defn wrapScript
   "Wrap function into a script"
-  ^czlab.flux.wflow.core.Activity
+  ^czlab.flux.wflow.Activity
   [func] {:pre [(fn? func)]} (script<> func))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
