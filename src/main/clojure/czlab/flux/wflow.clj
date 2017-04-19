@@ -21,7 +21,6 @@
 
   (:import [java.util.concurrent.atomic AtomicInteger]
            [java.util TimerTask]
-           [czlab.basal Stateful]
            [czlab.jasal
             RunnableWithId
             Interruptable
@@ -32,19 +31,18 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;(set! *warn-on-reflection* true)
-(declare cogRunAfter cogRun script<>)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defprotocol IWorkstream "" (execWith [_ job] ""))
+(defprotocol Workstream "" (execWith [_ job] ""))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defprotocol IJob "" (rootage [_] ""))
+(defprotocol Job "" (rootage [_] ""))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defprotocol ICog ""
+(defprotocol Cog ""
   (handle [_ arg] "")
   (job [_] "")
   (rerun [_] ""))
@@ -52,8 +50,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defprotocol Activity ""
-  (protoCog [_ nxtCog _] "")
+  (protoCog [_ nxtCog arg] "")
   (createCog [_ nxtCog] ""))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+(declare cogRunAfter cogRun script<>)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -69,13 +71,13 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- wrapc ""
-  ^czlab.flux.wflow.ICog
+  ^czlab.flux.wflow.Cog
   [x nxt] (-> (wrapa x) (.createCog nxt)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- rerun!
-  "" [^czlab.flux.wflow.ICog cog]
+  "" [^czlab.flux.wflow.Cog cog]
   (if-some [j (some-> cog .job)]
     (.reschedule ^Schedulable
                  (::scheduler @j) cog)))
@@ -107,16 +109,16 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful Cog
+(defstateful CogObj
 
-  ICog
+  Cog
 
   (handle [_ job]
     (if-fn? [f (:action @data)] (f _ job)))
 
   (job [_]
     (if-some [n (:next @data)]
-      (.job ^czlab.flux.wflow.ICog n)
+      (.job ^czlab.flux.wflow.Cog n)
       (:job @data)))
 
   (rerun [_] (rerun! _))
@@ -141,7 +143,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defmacro ^:private protoCog<> "" [activity nxtCog args]
-  `(entity<> Cog
+  `(entity<> CogObj
              (merge ~args
                     {:id (str "cog#" (seqint2))
                      :proto ~activity
@@ -158,7 +160,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn gjob
-  "" [^czlab.flux.wflow.ICog cog] (some-> cog .job))
+  "" [^czlab.flux.wflow.Cog cog] (some-> cog .job))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -185,7 +187,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
 (defn- cogRunAfter
-  "" [^czlab.flux.wflow.ICog cog]
+  "" [^czlab.flux.wflow.Cog cog]
   (if cog
     (let [{:keys [proto]} @cog
           cpu (gcpu (gjob cog))]
@@ -208,7 +210,7 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- cogRun "" [^czlab.flux.wflow.ICog this]
+(defn- cogRun "" [^czlab.flux.wflow.Cog this]
   (let
     [{:keys [proto]} @this
      job (gjob this)
@@ -235,7 +237,7 @@
 ;;
 (defn- onInterrupt
   "A timer has expired - used by (joins)"
-  [^czlab.flux.wflow.ICog this job waitSecs]
+  [^czlab.flux.wflow.Cog this job waitSecs]
   (let
     [err (format "*interrupt* %s : %d secs"
                  "timer expired" waitSecs)
@@ -252,13 +254,13 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful Postpone
+(defobject Postpone
 
   Initable
-  (init [_ cog]
+  (init [me cog]
     (.init ^Initable
            cog
-           {:delay (:delaySecs @data)}))
+           {:delay (:delaySecs me)}))
 
   Activity
   (protoCog [me nxCog _]
@@ -279,7 +281,7 @@
     (doto->> (.protoCog _ nx nil) (.init _ )))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -289,16 +291,16 @@
   [delaySecs]
   {:pre [(spos? delaySecs)]}
 
-  (entity<> Postpone
+  (object<> Postpone
             {:delaySecs delaySecs :typeid ::delay}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful Script
+(defobject Script
 
   Initable
-  (init [_ cog]
-    (let [{:keys [workFunc]} @data
+  (init [me cog]
+    (let [{:keys [workFunc]} me
           [s _] (countArity workFunc)]
       (.init ^Initable
              cog {:work workFunc :arity s})))
@@ -329,8 +331,8 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (stror (:scriptname @data)
-                   (name (:typeid @data)))))
+  (name [me] (stror (:scriptname me)
+                   (name (:typeid me)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -341,20 +343,17 @@
   ([workFunc] (script<> workFunc nil))
   ([workFunc script-name]
    {:pre [(fn? workFunc)]}
-   (entity<> Script
+   (object<> Script
              {:workFunc workFunc
               :scriptname script-name :typeid ::script})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defstateful Switch
+(defobject Switch
   Initable
-  (init [_ cog]
+  (init [me cog]
     (let [{:keys [choices cexpr dft]}
-          @data
+          me
           nx (:next @cog)]
       (->> {:dft (some-> dft (wrapc nx))
             :cexpr cexpr
@@ -386,7 +385,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -403,7 +402,7 @@
                          (conj! (wrapa v))))
                   (partition 2 choices))
         dft (some-> dft wrapa)]
-    (entity<> Switch
+    (object<> Switch
               {:choices choices
                :cexpr cexpr
                :dft dft
@@ -411,11 +410,11 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful NulJoin
+(defobject NulJoin
 
   Initable
-  (init [_ cog]
-    (->> {:forks (mapv #(wrapa %) (:branches @data))}
+  (init [me cog]
+    (->> {:forks (mapv #(wrapa %) (:branches me))}
          (.init ^Initable cog )))
 
   Activity
@@ -437,7 +436,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -445,17 +444,16 @@
   "Create a do-nothing *join task*"
   ^czlab.flux.wflow.Activity [branches]
 
-  (entity<> NulJoin
+  (object<> NulJoin
             {:typeid ::nuljoin :branches branches}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful AndJoin
+(defobject AndJoin
 
   Initable
-  (init [_ cog]
-    (let [{:keys [waitSecs branches]}
-          @data]
+  (init [me cog]
+    (let [{:keys [waitSecs branches]} me]
       (->> {:cnt (AtomicInteger. 0)
             :wait waitSecs
             :forks (mapv #(wrapa %) branches)}
@@ -503,7 +501,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -512,18 +510,17 @@
   ^czlab.flux.wflow.Activity
   [branches waitSecs]
 
-  (entity<> AndJoin
+  (object<> AndJoin
             {:branches branches
              :waitSecs waitSecs :typeid ::andjoin}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful OrJoin
+(defobject OrJoin
 
   Initable
-  (init [_ cog]
-    (let [{:keys [waitSecs branches]}
-          @data]
+  (init [me cog]
+    (let [{:keys [waitSecs branches]} me]
       (->> {:cnt (AtomicInteger. 0)
             :wait waitSecs
             :forks (mapv #(wrapa %) branches)}
@@ -570,7 +567,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -579,17 +576,17 @@
   ^czlab.flux.wflow.Activity
   [branches waitSecs]
 
-  (entity<> OrJoin
+  (object<> OrJoin
             {:branches branches
              :waitSecs waitSecs :typeid ::orjoin}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful Decision
+(defobject Decision
 
   Initable
-  (init [this cog]
-    (->> (select-keys @data
+  (init [me cog]
+    (->> (select-keys me
                       [:bexpr :then :else])
          (.init ^Initable cog)))
 
@@ -612,7 +609,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -624,7 +621,7 @@
    (decision<> bexpr then nil))
 
   ([bexpr then else]
-   (entity<> Decision
+   (object<> Decision
              {:typeid ::decision
               :bexpr bexpr :then then :else else})))
 
@@ -640,17 +637,17 @@
         (if-some
           [^Stateful
            n (.handle
-               ^czlab.flux.wflow.ICog body job)]
+               ^czlab.flux.wflow.Cog body job)]
           (cond
             ;;you can add a pause in-between iterations
-            (= ::delay (:typeid @(:proto @n)))
+            (= ::delay (:typeid (:proto @n)))
             (alterStateful n assoc :next cog)
 
             (identical? n cog)
             cog
 
             ;;replace body
-            (satisfies? ICog n)
+            (satisfies? Cog n)
             (do
               (alterStateful n assoc :next (:next @body))
               (alterStateful cog assoc :body n)
@@ -661,12 +658,11 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful WhileLoop
+(defobject WhileLoop
 
   Initable
-  (init [_ cog]
-    (let [{:keys [body bexpr]}
-          @data]
+  (init [me cog]
+    (let [{:keys [body bexpr]} me]
       (->> {:bexpr bexpr
             :body (wrapc body cog)}
            (.init ^Initable cog))))
@@ -681,7 +677,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -691,16 +687,16 @@
   [bexpr body]
   {:pre [(fn? bexpr)]}
 
-  (entity<> WhileLoop
+  (object<> WhileLoop
             {:bexpr bexpr :body body :typeid ::while}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful Split
+(defobject Split
 
   Initable
-  (init [_ cog]
-    (let [{:keys [branches options]} @data]
+  (init [me cog]
+    (let [{:keys [branches options]} me]
       (->> {:forks (mapv #(wrapa %) branches)
             :wait (or (:waitSecs options) 0)
             :joinStyle
@@ -729,7 +725,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -740,18 +736,18 @@
   {:pre [(some? options)]}
 
   (log/debug "forking with [%d] branches" (count branches))
-  (entity<> Split
+  (object<> Split
             {:branches branches
              :options options :typeid ::split}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful Group
+(defobject Group
 
   Initable
-  (init [_ cog]
+  (init [me cog]
     (->> {:tlist (atom (mapv #(wrapa %)
-                             (:acts @data)))}
+                             (:acts me)))}
          (.init ^Initable cog)))
 
   Activity
@@ -774,7 +770,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -784,7 +780,7 @@
   [a & xs]
   {:pre [(some? a)]}
 
-  (entity<> Group
+  (object<> Group
             {:acts (concat [a] xs) :typeid ::group}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -800,12 +796,12 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful ForLoop
+(defobject ForLoop
 
   Initable
-  (init [_ cog]
+  (init [me cog]
     (let [{:keys [lower upper body]}
-          @data
+          me
           j (gjob cog)]
       (->> {:bexpr (rangeExpr (lower j)
                               (upper j))
@@ -822,7 +818,7 @@
     (doto->> (.protoCog _ nx nil) (.init _)))
 
   Nameable
-  (name [_] (name (:typeid @data))))
+  (name [me] (name (:typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -832,15 +828,15 @@
   [lower upper body]
   {:pre [(fn? lower)(fn? upper)]}
 
-  (entity<> ForLoop
+  (object<> ForLoop
             {:lower lower
              :upper upper
              :body body :typeid ::for}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defentity Job
-  IJob
+(defentity JobObj
+  Job
   (rootage [_] (::origin @data)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -852,7 +848,7 @@
   ([_sch ws] (job<> _sch ws nil))
   ([_sch] (job<> _sch nil nil))
   ([_sch ws originObj]
-   (entity<> Job
+   (entity<> JobObj
              {:id (str "job#" (seqint2))
               ::origin originObj
               ::scheduler _sch
@@ -875,16 +871,16 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful WorkstreamEx
-  IWorkstream
+(defobject WorkstreamExObj
+  Workstream
   (execWith [me job] (wsExec me job))
   Catchable
-  (catche [_ e] ((::efn @data) e)))
+  (catche [_ e] ((::efn me) e)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defstateful Workstream
-  IWorkstream
+(defobject WorkstreamObj
+  Workstream
   (execWith [me job] (wsExec me job)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -893,7 +889,7 @@
   "Create a work flow with the
   follwing syntax:
   (workstream<> taskdef [taskdef...] [:catch func])"
-  ^czlab.flux.wflow.IWorkstream
+  ^czlab.flux.wflow.Workstream
   [task0 & args] {:pre [(some? task0)]}
   ;;first we look for error handling which
   ;;must be at the end of the args
@@ -905,10 +901,10 @@
        [b (drop-last 2 args)]
        [nil args])]
     (if (fn? err)
-      (entity<> WorkstreamEx
+      (object<> WorkstreamExObj
                 {::head (wsHead task0 tasks)
                  ::efn err})
-      (entity<> Workstream {::head (wsHead task0 tasks)}))))
+      (object<> WorkstreamObj {::head (wsHead task0 tasks)}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
