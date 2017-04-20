@@ -34,8 +34,7 @@
   :test-paths ["src/test/clojure"]
   ;;:resource-paths ["src/main/resources"]
 
-  :jvm-opts ["-Dlog4j.configurationFile=file:attic/log4j2.xml"
-             "-Dczlabloggerornotflag=true"]
+  :jvm-opts ["-Dlog4j.configurationFile=file:attic/log4j2.xml"]
   :javac-options ["-source" "8"
                   "-Xlint:unchecked" "-Xlint:-options" "-Xlint:deprecation"])
 
