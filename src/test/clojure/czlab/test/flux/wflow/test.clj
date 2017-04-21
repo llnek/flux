@@ -34,19 +34,19 @@
             {:join :and
              :waitSecs 2}
             #(do->nil (pause 1000)
-                      (alterAtomic % assoc :x 5))
+                      (alter-atomic % assoc :x 5))
             #(do->nil (pause 4500)
-                      (alterAtomic % assoc :y 5)))
+                      (alter-atomic % assoc :y 5)))
           #(do->nil
              (->> (+ (:x @%) (:y @%))
-                  (alterAtomic % assoc :z )))
+                  (alter-atomic % assoc :z )))
           :catch
           (fn [{:keys [cog error]}]
             (let [j (gjob cog)]
-              (alterAtomic j assoc :z 100))))
+              (alter-atomic j assoc :z 100))))
         svr (mksvr)
         job (job<> svr ws)]
-    (execWith ws job)
+    (exec-with ws job)
     (pause 2500)
     (.dispose svr)
     (:z @job)))
@@ -60,15 +60,15 @@
         (workstream<>
           (fork<> :and
                   #(do->nil (pause 1000)
-                            (alterAtomic % assoc :x 5))
+                            (alter-atomic % assoc :x 5))
                   #(do->nil (pause 1500)
-                            (alterAtomic % assoc :y 5)))
+                            (alter-atomic % assoc :y 5)))
           #(do->nil
              (->> (+ (:x @%) (:y @%))
-                  (alterAtomic % assoc :z))))
+                  (alter-atomic % assoc :z))))
         svr (mksvr)
         job (job<> svr ws)]
-    (execWith ws job)
+    (exec-with ws job)
     (pause 3500)
     (.dispose svr)
     (:z @job)))
@@ -82,13 +82,13 @@
         (workstream<>
           (fork<> :or
                   #(do->nil (pause 1000)
-                            (alterAtomic % assoc :a 10))
+                            (alter-atomic % assoc :a 10))
                   #(do->nil (pause 3500)
-                            (alterAtomic % assoc :b 5)))
+                            (alter-atomic % assoc :b 5)))
           #(do->nil (assert (contains? @% :a))))
         svr (mksvr)
         job (job<> svr ws)]
-    (execWith ws job)
+    (exec-with ws job)
     (pause 2000)
     (.dispose svr)
     (:a @job)))
@@ -102,11 +102,11 @@
         (workstream<>
           (decision<>
             #(do % true)
-            #(do->nil (alterAtomic % assoc :a 10))
-            #(do->nil (alterAtomic % assoc :a 5))))
+            #(do->nil (alter-atomic % assoc :a 10))
+            #(do->nil (alter-atomic % assoc :a 5))))
         svr (mksvr)
         job (job<> svr ws)]
-    (execWith ws job)
+    (exec-with ws job)
     (pause 1500)
     (.dispose svr)
     (:a @job)))
@@ -120,12 +120,12 @@
         (workstream<>
           (decision<>
             #(do % false)
-            #(do->nil (alterAtomic % assoc :a 5))
+            #(do->nil (alter-atomic % assoc :a 5))
             (script<> #(do->nil
-                         (alterAtomic %2 assoc :a 10)))))
+                         (alter-atomic %2 assoc :a 10)))))
         svr (mksvr)
         job (job<> svr ws)]
-    (execWith ws job)
+    (exec-with ws job)
     (pause 1500)
     (.dispose svr)
     (:a @job)))
@@ -139,10 +139,10 @@
             #(do % "z")
             nil
             "y" (script<> #(do->nil %1 %2 ))
-            "z" #(do->nil (alterAtomic % assoc :z 10))))
+            "z" #(do->nil (alter-atomic % assoc :z 10))))
         svr (mksvr)
         job (job<> svr ws)]
-    (execWith ws job)
+    (exec-with ws job)
     (pause 2500)
     (.dispose svr)
     (:z @job)))
@@ -155,12 +155,12 @@
           (choice<>
             #(do % "z")
             (script<> #(do->nil
-                         (alterAtomic % assoc :z 10)), "dft")
+                         (alter-atomic % assoc :z 10)), "dft")
             "x" #(do->nil %1 %2 )
             "y" #(do->nil %1 %2 )))
         svr (mksvr)
         job (job<> svr ws)]
-    (execWith ws job)
+    (exec-with ws job)
     (pause 2500)
     (.dispose svr)
     (:z @job)))
@@ -178,11 +178,11 @@
             (script<> #(do->nil
                          (->>
                            (inc (:z @%))
-                           (alterAtomic % assoc :z))))))
+                           (alter-atomic % assoc :z))))))
         svr (mksvr)
         job (job<> svr ws)]
-    (alterAtomic job assoc :z 0)
-    (execWith ws job)
+    (alter-atomic job assoc :z 0)
+    (exec-with ws job)
     (pause 2500)
     (.dispose svr)
     (:z @job)))
@@ -199,11 +199,11 @@
             (script<> #(do->nil
                          (->>
                            (inc (:cnt @%2))
-                           (alterAtomic %2 assoc :cnt))))))
+                           (alter-atomic %2 assoc :cnt))))))
         svr (mksvr)
         job (job<> svr ws)]
-    (alterAtomic job assoc :cnt 0)
-    (execWith ws job)
+    (alter-atomic job assoc :cnt 0)
+    (exec-with ws job)
     (pause 2500)
     (.dispose svr)
     (:cnt @job)))
@@ -218,11 +218,11 @@
         (workstream<>
           (postpone<> 2)
           #(do->nil (->> (System/currentTimeMillis)
-                         (alterAtomic % assoc :time))))
+                         (alter-atomic % assoc :time))))
         svr (mksvr)
         job (job<> svr ws)]
-    (alterAtomic job assoc :time -1)
-    (execWith ws job)
+    (alter-atomic job assoc :time -1)
+    (exec-with ws job)
     (pause 2500)
     (.dispose svr)
     (- (:time @job) now)))
