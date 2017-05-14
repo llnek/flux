@@ -8,20 +8,19 @@
 
 (ns czlab.test.flux.wflow.test
 
-  (:require [czlab.basal.logging :as log])
+  (:require [czlab.basal.scheduler :as r]
+            [czlab.basal.process :as p]
+            [czlab.basal.core :as c]
+            [czlab.flux.wflow :as w])
 
-  (:use [czlab.basal.scheduler]
-        [czlab.basal.process]
-        [czlab.basal.core]
-        [czlab.flux.wflow]
-        [clojure.test])
+  (:use [clojure.test])
 
   (:import [czlab.jasal Schedulable CU]
            [czlab.basal Stateful]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
-(defn- mksvr "" ^Schedulable [] (doto (scheduler<> "test") .activate))
+(defn- mksvr "" ^Schedulable [] (doto (r/scheduler<> "test") .activate))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;
@@ -29,25 +28,25 @@
   "should return 100"
   []
   (let [ws
-        (workstream<>
-          (fork<>
+        (w/workstream<>
+          (w/fork<>
             {:join :and
              :waitSecs 2}
-            #(do->nil (pause 1000)
-                      (alter-atomic % assoc :x 5))
-            #(do->nil (pause 4500)
-                      (alter-atomic % assoc :y 5)))
-          #(do->nil
+            #(c/do->nil (c/pause 1000)
+                        (c/alter-atomic % assoc :x 5))
+            #(c/do->nil (c/pause 4500)
+                        (c/alter-atomic % assoc :y 5)))
+          #(c/do->nil
              (->> (+ (:x @%) (:y @%))
-                  (alter-atomic % assoc :z )))
+                  (c/alter-atomic % assoc :z )))
           :catch
           (fn [{:keys [cog error]}]
-            (let [j (gjob cog)]
-              (alter-atomic j assoc :z 100))))
+            (let [j (w/gjob cog)]
+              (c/alter-atomic j assoc :z 100))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (exec-with ws job)
-    (pause 2500)
+        job (w/job<> svr ws)]
+    (w/exec-with ws job)
+    (c/pause 2500)
     (.dispose svr)
     (:z @job)))
 
@@ -57,19 +56,19 @@
   "should return 10"
   []
   (let [ws
-        (workstream<>
-          (fork<> :and
-                  #(do->nil (pause 1000)
-                            (alter-atomic % assoc :x 5))
-                  #(do->nil (pause 1500)
-                            (alter-atomic % assoc :y 5)))
-          #(do->nil
+        (w/workstream<>
+          (w/fork<> :and
+                  #(c/do->nil (c/pause 1000)
+                              (c/alter-atomic % assoc :x 5))
+                  #(c/do->nil (c/pause 1500)
+                              (c/alter-atomic % assoc :y 5)))
+          #(c/do->nil
              (->> (+ (:x @%) (:y @%))
-                  (alter-atomic % assoc :z))))
+                  (c/alter-atomic % assoc :z))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (exec-with ws job)
-    (pause 3500)
+        job (w/job<> svr ws)]
+    (w/exec-with ws job)
+    (c/pause 3500)
     (.dispose svr)
     (:z @job)))
 
@@ -79,17 +78,17 @@
   "should return 10"
   []
   (let [ws
-        (workstream<>
-          (fork<> :or
-                  #(do->nil (pause 1000)
-                            (alter-atomic % assoc :a 10))
-                  #(do->nil (pause 3500)
-                            (alter-atomic % assoc :b 5)))
-          #(do->nil (assert (contains? @% :a))))
+        (w/workstream<>
+          (w/fork<> :or
+                  #(c/do->nil (c/pause 1000)
+                            (c/alter-atomic % assoc :a 10))
+                  #(c/do->nil (c/pause 3500)
+                            (c/alter-atomic % assoc :b 5)))
+          #(c/do->nil (assert (contains? @% :a))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (exec-with ws job)
-    (pause 2000)
+        job (w/job<> svr ws)]
+    (w/exec-with ws job)
+    (c/pause 2000)
     (.dispose svr)
     (:a @job)))
 
@@ -99,15 +98,15 @@
   "should return 10"
   []
   (let [ws
-        (workstream<>
-          (decision<>
+        (w/workstream<>
+          (w/decision<>
             #(do % true)
-            #(do->nil (alter-atomic % assoc :a 10))
-            #(do->nil (alter-atomic % assoc :a 5))))
+            #(c/do->nil (c/alter-atomic % assoc :a 10))
+            #(c/do->nil (c/alter-atomic % assoc :a 5))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (exec-with ws job)
-    (pause 1500)
+        job (w/job<> svr ws)]
+    (w/exec-with ws job)
+    (c/pause 1500)
     (.dispose svr)
     (:a @job)))
 
@@ -117,16 +116,16 @@
   "should return 10"
   []
   (let [ws
-        (workstream<>
-          (decision<>
+        (w/workstream<>
+          (w/decision<>
             #(do % false)
-            #(do->nil (alter-atomic % assoc :a 5))
-            (script<> #(do->nil
-                         (alter-atomic %2 assoc :a 10)))))
+            #(c/do->nil (c/alter-atomic % assoc :a 5))
+            (w/script<> #(c/do->nil
+                         (c/alter-atomic %2 assoc :a 10)))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (exec-with ws job)
-    (pause 1500)
+        job (w/job<> svr ws)]
+    (w/exec-with ws job)
+    (c/pause 1500)
     (.dispose svr)
     (:a @job)))
 
@@ -134,16 +133,16 @@
 ;;
 (defn- testWFlowSwitch->found "" []
   (let [ws
-        (workstream<>
-          (choice<>
+        (w/workstream<>
+          (w/choice<>
             #(do % "z")
             nil
-            "y" (script<> #(do->nil %1 %2 ))
-            "z" #(do->nil (alter-atomic % assoc :z 10))))
+            "y" (w/script<> #(c/do->nil %1 %2 ))
+            "z" #(c/do->nil (c/alter-atomic % assoc :z 10))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (exec-with ws job)
-    (pause 2500)
+        job (w/job<> svr ws)]
+    (w/exec-with ws job)
+    (c/pause 2500)
     (.dispose svr)
     (:z @job)))
 
@@ -151,17 +150,17 @@
 ;;
 (defn- testWFlowSwitch->default "" []
   (let [ws
-        (workstream<>
-          (choice<>
+        (w/workstream<>
+          (w/choice<>
             #(do % "z")
-            (script<> #(do->nil
-                         (alter-atomic % assoc :z 10)), "dft")
-            "x" #(do->nil %1 %2 )
-            "y" #(do->nil %1 %2 )))
+            (w/script<> #(c/do->nil
+                         (c/alter-atomic % assoc :z 10)), "dft")
+            "x" #(c/do->nil %1 %2 )
+            "y" #(c/do->nil %1 %2 )))
         svr (mksvr)
-        job (job<> svr ws)]
-    (exec-with ws job)
-    (pause 2500)
+        job (w/job<> svr ws)]
+    (w/exec-with ws job)
+    (c/pause 2500)
     (.dispose svr)
     (:z @job)))
 
@@ -171,19 +170,19 @@
   "should return 10"
   []
   (let [ws
-        (workstream<>
-          (floop<>
+        (w/workstream<>
+          (w/floop<>
             #(do % 0)
             #(do % 10)
-            (script<> #(do->nil
-                         (->>
-                           (inc (:z @%))
-                           (alter-atomic % assoc :z))))))
+            (w/script<> #(c/do->nil
+                           (->>
+                             (inc (:z @%))
+                             (c/alter-atomic % assoc :z))))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (alter-atomic job assoc :z 0)
-    (exec-with ws job)
-    (pause 2500)
+        job (w/job<> svr ws)]
+    (c/alter-atomic job assoc :z 0)
+    (w/exec-with ws job)
+    (c/pause 2500)
     (.dispose svr)
     (:z @job)))
 
@@ -193,18 +192,18 @@
   "should return 10"
   []
   (let [ws
-        (workstream<>
-          (wloop<>
+        (w/workstream<>
+          (w/wloop<>
             #(< (:cnt @%) 10)
-            (script<> #(do->nil
-                         (->>
-                           (inc (:cnt @%2))
-                           (alter-atomic %2 assoc :cnt))))))
+            (w/script<> #(c/do->nil
+                           (->>
+                             (inc (:cnt @%2))
+                             (c/alter-atomic %2 assoc :cnt))))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (alter-atomic job assoc :cnt 0)
-    (exec-with ws job)
-    (pause 2500)
+        job (w/job<> svr ws)]
+    (c/alter-atomic job assoc :cnt 0)
+    (w/exec-with ws job)
+    (c/pause 2500)
     (.dispose svr)
     (:cnt @job)))
 
@@ -215,15 +214,15 @@
   []
   (let [now (System/currentTimeMillis)
         ws
-        (workstream<>
-          (postpone<> 2)
-          #(do->nil (->> (System/currentTimeMillis)
-                         (alter-atomic % assoc :time))))
+        (w/workstream<>
+          (w/postpone<> 2)
+          #(c/do->nil (->> (System/currentTimeMillis)
+                           (c/alter-atomic % assoc :time))))
         svr (mksvr)
-        job (job<> svr ws)]
-    (alter-atomic job assoc :time -1)
-    (exec-with ws job)
-    (pause 2500)
+        job (w/job<> svr ws)]
+    (c/alter-atomic job assoc :time -1)
+    (w/exec-with ws job)
+    (c/pause 2500)
     (.dispose svr)
     (- (:time @job) now)))
 
