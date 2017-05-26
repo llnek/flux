@@ -66,7 +66,6 @@ However, if the logic decides that a new `Activity` is to be returned,
 then the engine will `run` this new `Activity`, implying that the
 user can dynamically alter the current `workstream`.
 
-
 ```clojure
 (ns demo.app
   (:require [czlab.flux.wflow.core :as w
