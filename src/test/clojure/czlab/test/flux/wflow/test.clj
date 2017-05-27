@@ -46,7 +46,7 @@
         svr (mksvr)
         job (w/job<> svr ws)]
     (w/exec-with ws job)
-    (c/pause 2500)
+    (c/pause 3500)
     (.dispose svr)
     (:z @job)))
 
