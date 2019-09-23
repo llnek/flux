@@ -1,4 +1,4 @@
-;; Copyright (c) 2013-2017, Kenneth Leung. All rights reserved.
+;; Copyright © 2013-2019, Kenneth Leung. All rights reserved.
 ;; The use and distribution terms for this software are covered by the
 ;; Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
 ;; which can be found in the file epl-v10.html at the root of this distribution.
@@ -8,256 +8,194 @@
 
 (ns czlab.test.flux.wflow.test
 
-  (:require [czlab.basal.scheduler :as r]
-            [czlab.basal.process :as p]
-            [czlab.basal.core :as c]
-            [czlab.flux.wflow :as w])
-
-  (:use [clojure.test])
-
-  (:import [czlab.jasal Schedulable CU]
-           [czlab.basal Stateful]))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- mksvr "" ^Schedulable [] (doto (r/scheduler<> "test") .activate))
+  (:require [czlab.basal.proc :as p]
+            [czlab.basal.util :as u]
+            [czlab.basal.log :as l]
+            [czlab.basal.xpis :as po]
+            [clojure.test :as ct]
+            [czlab.flux.core
+             :as w :refer [defwflow wkflow runner]]
+            [czlab.basal.core
+             :as c :refer [ensure?? ensure-thrown??]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowSplit->And->Expire
-  "should return 100"
-  []
-  (let [ws
-        (w/workstream<>
-          (w/fork<>
-            {:join :and
-             :waitSecs 2}
-            #(c/do->nil (c/pause 1000)
-                        (c/alter-atomic % assoc :x 5))
-            #(c/do->nil (c/pause 4500)
-                        (c/alter-atomic % assoc :y 5)))
-          #(c/do->nil
-             (->> (+ (:x @%) (:y @%))
-                  (c/alter-atomic % assoc :z )))
-          :catch
-          (fn [{:keys [cog error]}]
-            (let [j (w/gjob cog)]
-              (c/alter-atomic j assoc :z 100))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (w/exec-with ws job)
-    (c/pause 3500)
-    (.dispose svr)
-    (:z @job)))
+(defn- mksvr
+  "" [] (doto (p/scheduler<> "test" {:threads 4}) po/activate))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowSplit->And
-  "should return 10"
-  []
-  (let [ws
-        (w/workstream<>
-          (w/fork<> :and
-                  #(c/do->nil (c/pause 1000)
-                              (c/alter-atomic % assoc :x 5))
-                  #(c/do->nil (c/pause 1500)
-                              (c/alter-atomic % assoc :y 5)))
-          #(c/do->nil
-             (->> (+ (:x @%) (:y @%))
-                  (c/alter-atomic % assoc :z))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (w/exec-with ws job)
-    (c/pause 3500)
-    (.dispose svr)
-    (:z @job)))
+(defwflow
+  ^:private
+  testWFlowSplitAndExpire
+  (w/split-join<> [:type :and :wait-secs 2]
+                  (w/script<> (c/fn_2 (c/do#nil (u/pause 1000)
+                                                (po/setv ____2 :x 5))) "f-1000")
+                  (w/script<> (c/fn_2 (c/do#nil (u/pause 4500)
+                                                (po/setv ____2 :y 5))) "f-4500")
+                  :expiry
+                  (c/fn_2 (c/do#nil (po/setv ____2 :z 100)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowSplit->Or
-  "should return 10"
-  []
-  (let [ws
-        (w/workstream<>
-          (w/fork<> :or
-                  #(c/do->nil (c/pause 1000)
-                            (c/alter-atomic % assoc :a 10))
-                  #(c/do->nil (c/pause 3500)
-                            (c/alter-atomic % assoc :b 5)))
-          #(c/do->nil (assert (contains? @% :a))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (w/exec-with ws job)
-    (c/pause 2000)
-    (.dispose svr)
-    (:a @job)))
+(defwflow
+  ^:private
+  testWFlowSplitAnd
+  (w/split-join<> [:type :and :wait-secs 5]
+                  #(c/do#nil (u/pause 1000)
+                             (po/setv %2 :x 5))
+                  #(c/do#nil (u/pause 1500)
+                             (po/setv %2 :y 5)))
+  #(c/let#nil
+     [x (po/getv %2 :x)
+      y (po/getv %2 :y)]
+     (po/setv %2 :z (+ x y))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowIf->true
-  "should return 10"
-  []
-  (let [ws
-        (w/workstream<>
-          (w/decision<>
-            #(do % true)
-            #(c/do->nil (c/alter-atomic % assoc :a 10))
-            #(c/do->nil (c/alter-atomic % assoc :a 5))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (w/exec-with ws job)
-    (c/pause 1500)
-    (.dispose svr)
-    (:a @job)))
+(defwflow
+  ^:private
+  testWFlowSplitOr
+  (w/split-join<> [:type :or]
+                  #(c/do#nil (u/pause 1000)
+                             (po/setv %2 :a 10))
+                  #(c/do#nil (u/pause 3500)
+                             (po/setv %2 :b 5)))
+  #(c/do#nil (assert (and (po/has? %2 :a)
+                          (not (po/has? %2 :b))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowIf->false
-  "should return 10"
-  []
-  (let [ws
-        (w/workstream<>
-          (w/decision<>
-            #(do % false)
-            #(c/do->nil (c/alter-atomic % assoc :a 5))
-            (w/script<> #(c/do->nil
-                         (c/alter-atomic %2 assoc :a 10)))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (w/exec-with ws job)
-    (c/pause 1500)
-    (.dispose svr)
-    (:a @job)))
+(defwflow
+  ^:private
+  testWFlowIftrue
+  (w/decision<> #(c/do#true %)
+                #(c/do#nil (po/setv %2 :a 10))
+                #(c/do#nil (po/setv %2 :a 5))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowSwitch->found "" []
-  (let [ws
-        (w/workstream<>
-          (w/choice<>
-            #(do % "z")
-            nil
-            "y" (w/script<> #(c/do->nil %1 %2 ))
-            "z" #(c/do->nil (c/alter-atomic % assoc :z 10))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (w/exec-with ws job)
-    (c/pause 2500)
-    (.dispose svr)
-    (:z @job)))
+(defwflow
+  ^:private
+  testWFlowIffalse
+  (w/decision<> #(c/do#false %)
+                #(c/do#nil (po/setv %2 :a 5))
+                (w/script<> #(c/do#nil
+                               (po/setv %2 :a 10)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowSwitch->default "" []
-  (let [ws
-        (w/workstream<>
-          (w/choice<>
-            #(do % "z")
-            (w/script<> #(c/do->nil
-                         (c/alter-atomic % assoc :z 10)), "dft")
-            "x" #(c/do->nil %1 %2 )
-            "y" #(c/do->nil %1 %2 )))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (w/exec-with ws job)
-    (c/pause 2500)
-    (.dispose svr)
-    (:z @job)))
+(defwflow
+  ^:private
+  testWFlowSwitchfound
+  (w/choice<> #(do % "z")
+              "y" (w/script<> #(c/do#nil %1 %2))
+              "z" #(c/do#nil (po/setv %2 :z 10))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowFor
-  "should return 10"
-  []
-  (let [ws
-        (w/workstream<>
-          (w/floop<>
-            #(do % 0)
-            #(do % 10)
-            (w/script<> #(c/do->nil
-                           (->>
-                             (inc (:z @%))
-                             (c/alter-atomic % assoc :z))))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (c/alter-atomic job assoc :z 0)
-    (w/exec-with ws job)
-    (c/pause 2500)
-    (.dispose svr)
-    (:z @job)))
+(defwflow
+  ^:private
+  testWFlowSwitchdefault
+  (w/choice<> #(do % "z")
+              "x" #(c/do#nil %1 %2)
+              "y" #(c/do#nil %1 %2)
+              :default
+              (w/script<> #(c/do#nil
+                             (po/setv %2 :z 10)) "dft")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowWhile
-  "should return 10"
-  []
-  (let [ws
-        (w/workstream<>
-          (w/wloop<>
-            #(< (:cnt @%) 10)
-            (w/script<> #(c/do->nil
-                           (->>
-                             (inc (:cnt @%2))
-                             (c/alter-atomic %2 assoc :cnt))))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (c/alter-atomic job assoc :cnt 0)
-    (w/exec-with ws job)
-    (c/pause 2500)
-    (.dispose svr)
-    (:cnt @job)))
+(defwflow
+  ^:private
+  _testWFlowFor
+  (w/for<> #(do % 0)
+           #(do % 10)
+           (w/script<> #(c/do#nil
+                            (->> (inc (po/getv %2 :z))
+                                 (po/setv %2 :z))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(defn- testWFlowDelay
-  "should return "
-  []
-  (let [now (System/currentTimeMillis)
-        ws
-        (w/workstream<>
-          (w/postpone<> 2)
-          #(c/do->nil (->> (System/currentTimeMillis)
-                           (c/alter-atomic % assoc :time))))
-        svr (mksvr)
-        job (w/job<> svr ws)]
-    (c/alter-atomic job assoc :time -1)
-    (w/exec-with ws job)
-    (c/pause 2500)
-    (.dispose svr)
-    (- (:time @job) now)))
+(defwflow
+  ^:private
+  _testWFlowWhile
+  (w/while<> #(< (po/getv %1 :cnt) 10)
+             (w/script<> #(c/do#nil
+                            (->> (inc (po/getv %2 :cnt))
+                                 (po/setv %2 :cnt))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;
-(deftest czlabtestfluxwflow-test
+(defwflow
+  ^:private
+  _testWFlowDelay
+  (w/postpone<> 2)
+  #(c/do#nil (->> (u/system-time)
+                  (po/setv %2 :time))))
 
-  (testing
-    "related to: split"
-    (is (== 100 (testWFlowSplit->And->Expire)))
-    (is (== 10 (testWFlowSplit->And)))
-    (is (== 10 (testWFlowSplit->Or))))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(c/deftest test-core
 
-  (testing
-    "related to: switch"
-    (is (== 10 (testWFlowSwitch->default)))
-    (is (== 10 (testWFlowSwitch->found))))
+  (ensure?? "split;expire"
+            (= 100 (let [job (w/job<> (mksvr))]
+                     (w/exec testWFlowSplitAndExpire job)
+                     (u/pause 8000)
+                     (po/finz (runner job))
+                     (po/getv job :z))))
 
-  (testing
-    "related to: if"
-    (is (== 10 (testWFlowIf->false)))
-    (is (== 10 (testWFlowIf->true))))
+  (ensure?? "split;and" (= 10 (let [job (w/job<> (mksvr))]
+                                (w/exec testWFlowSplitAnd job)
+                                (u/pause 3500)
+                                (po/finz (runner job))
+                                (po/getv job :z))))
 
-  (testing
-    "related to: loop"
-    (is (== 10 (testWFlowWhile)))
-    (is (== 10 (testWFlowFor))))
+  (ensure?? "split;or" (= 10 (let [job (w/job<> (mksvr))]
+                               (w/exec testWFlowSplitOr job)
+                               (u/pause 2000)
+                               (po/finz (runner job))
+                               (po/getv job :a))))
 
-  (testing
-    "related to: delay"
-    (is (let [x (testWFlowDelay)]
-          (and (> x 2000)
-               (< x 3000)))))
+  (ensure?? "switch;default" (= 10 (let [job (w/job<> (mksvr))]
+                                     (w/exec testWFlowSwitchdefault job)
+                                     (u/pause 2500)
+                                     (po/finz (runner job))
+                                     (po/getv job :z))))
 
-  (is (string? "That's all folks!")))
+  (ensure?? "switch;found" (= 10 (let [job (w/job<> (mksvr))]
+                                   (w/exec testWFlowSwitchfound job)
+                                   (u/pause 2500)
+                                   (po/finz (runner job))
+                                   (po/getv job :z))))
+
+  (ensure?? "if;false" (= 10 (let [job (w/job<> (mksvr))]
+                               (w/exec testWFlowIffalse job)
+                               (u/pause 1500)
+                               (po/finz (runner job))
+                               (po/getv job :a))))
+
+  (ensure?? "if;true" (= 10 (let [job (w/job<> (mksvr))]
+                              (w/exec testWFlowIftrue job)
+                              (u/pause 1500)
+                              (po/finz (runner job))
+                              (po/getv job :a))))
+
+  (ensure?? "loop;while" (= 10 (let [job (w/job<> (mksvr) {:cnt 0})]
+                                 (w/exec _testWFlowWhile job)
+                                 (u/pause 2500)
+                                 (po/finz (runner job))
+                                 (po/getv job :cnt))))
+
+  (ensure?? "loop;for" (= 10 (let [job (w/job<> (mksvr))]
+                               (po/setv job :z 0)
+                               (w/exec _testWFlowFor job)
+                               (u/pause 2500)
+                               (po/finz (runner job))
+                               (po/getv job :z))))
+
+  (ensure?? "delay" (let [now (u/system-time)
+                          job (w/job<> (mksvr) {:time -1})]
+                      (w/exec _testWFlowDelay job)
+                      (u/pause 2500)
+                      (po/finz (runner job))
+                      (let [x (- (po/getv job :time) now)]
+                        (and (> x 2000) (< x 3000)))))
+
+  (ensure?? "test-end" (= 1 1)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(ct/deftest
+  ^:test-core flux-test-core
+  (ct/is (c/clj-test?? test-core)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;EOF
