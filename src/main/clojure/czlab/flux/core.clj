@@ -74,6 +74,39 @@
   "" [c e] `(hash-map :step ~c :error ~e))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(declare step-run-after step-run proto-step<>)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defn- rinit!
+  "Reset a step." [step]
+  (if step (step-init (po/parent step) step)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defrecord Script []
+  Symbol
+  (step-init [me step]
+    (let [{:keys [work-func]} me
+          [s _] (m/count-arity work-func)]
+      (po/init step {:work work-func :arity s})))
+  (step-reify [me nx]
+    (->> {:action (fn [cur job]
+                    (let [{:keys [next work arity]}
+                          (po/get-conf cur)
+                          a (cond
+                              (c/in? arity 2) (work cur job)
+                              (c/in? arity 1) (work job)
+                              :else (u/throw-BadArg "Expected %s: on %s"
+                                                    "arity 2 or 1" (class work)))]
+                      (rinit! cur)
+                      (if-some [a' (csymb?? a)]
+                        (step-reify a' next) next)))}
+         (proto-step<> me nx) (step-init me)))
+  po/Typeable
+  (typeid [_] (:typeid _))
+  po/Nameable
+  (name [me] (c/stror (:script me) (name (po/typeid me)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro script<>
 
   "Create a *scriptable symbol*."
@@ -86,9 +119,6 @@
                                :work-func ~workFunc
                                :script ~script-name
                                :typeid :czlab.flux.core/script)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(declare step-run-after step-run)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn wrap-symb??
@@ -120,11 +150,6 @@
   [step job wsecs]
   (when (c/spos? wsecs)
     (p/alarm (runner job) (* 1000 wsecs) step job)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defn- rinit!
-  "Reset a step." [step]
-  (if step (step-init (po/parent step) step)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- proto-step<>
@@ -259,31 +284,6 @@
   `(czlab.basal.core/object<> czlab.flux.core.Postpone
                               :delay-secs ~delay-secs
                               :typeid :czlab.flux.core/delay))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defrecord Script []
-  Symbol
-  (step-init [me step]
-    (let [{:keys [work-func]} me
-          [s _] (m/count-arity work-func)]
-      (po/init step {:work work-func :arity s})))
-  (step-reify [me nx]
-    (->> {:action (fn [cur job]
-                    (let [{:keys [next work arity]}
-                          (po/get-conf cur)
-                          a (cond
-                              (c/in? arity 2) (work cur job)
-                              (c/in? arity 1) (work job)
-                              :else (u/throw-BadArg "Expected %s: on %s"
-                                                    "arity 2 or 1" (class work)))]
-                      (rinit! cur)
-                      (if-some [a' (csymb?? a)]
-                        (step-reify a' next) next)))}
-         (proto-step<> me nx) (step-init me)))
-  po/Typeable
-  (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (c/stror (:script me) (name (po/typeid me)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
