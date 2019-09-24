@@ -378,7 +378,7 @@
                 :body (wrapc body step)})))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
-                    (let [{:keys [bexpr body]}
+                    (let [{:keys [next bexpr body]}
                           (po/get-conf cur)]
                       (if-not (bexpr job)
                         (do (rinit! cur) next)
@@ -615,7 +615,7 @@
                 :bexpr (range-expr low high)})))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
-                    (let [{:keys [bexpr body]}
+                    (let [{:keys [next bexpr body]}
                           (po/get-conf cur)]
                       (if-not (bexpr job)
                         (do (rinit! cur) next)
