@@ -8,15 +8,15 @@
 
 (ns czlab.test.flux.wflow.test
 
-  (:require [czlab.basal.proc :as p]
-            [czlab.basal.util :as u]
-            [czlab.basal.log :as l]
-            [czlab.basal.xpis :as po]
-            [clojure.test :as ct]
-            [czlab.flux.core
-             :as w :refer [defwflow wkflow runner]]
-            [czlab.basal.core
-             :as c :refer [ensure?? ensure-thrown??]]))
+  (:require [clojure.test :as ct]
+            [czlab.flux
+             [core :as w :refer [defwflow wkflow runner]]]
+            [czlab.basal
+             [proc :as p]
+             [util :as u]
+             [log :as l]
+             [xpis :as po]
+             [core :as c :refer [ensure?? ensure-thrown??]]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- mksvr

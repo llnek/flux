@@ -6,20 +6,22 @@
 ;; the terms of this license.
 ;; You must not remove this notice, or any other, from this software.
 
-(ns ^{:doc "A minimal worflow framework."
-      :author "Kenneth Leung"}
+(ns
+  ^{:doc "A minimal worflow framework."
+    :author "Kenneth Leung"}
 
   czlab.flux.core
 
   (:require [clojure.java.io :as io]
             [clojure.string :as cs]
-            [czlab.basal.log :as l]
-            [czlab.basal.util :as u]
-            [czlab.basal.proc :as p]
-            [czlab.basal.meta :as m]
-            [czlab.basal.util :as u]
-            [czlab.basal.xpis :as po]
-            [czlab.basal.core :as c :refer [n#]])
+            [czlab.basal
+             [util :as u]
+             [log :as l]
+             [proc :as p]
+             [meta :as m]
+             [util :as u]
+             [xpis :as po]
+             [core :as c :refer [n#]]])
 
   (:import [java.util.concurrent.atomic AtomicInteger]
            [java.util.concurrent TimeoutException]
