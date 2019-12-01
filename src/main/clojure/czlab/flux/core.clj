@@ -6,22 +6,19 @@
 ;; the terms of this license.
 ;; You must not remove this notice, or any other, from this software.
 
-(ns
-  ^{:doc "A minimal worflow framework."
-    :author "Kenneth Leung"}
+(ns czlab.flux.core
 
-  czlab.flux.core
+  "A minimal worflow framework."
 
   (:require [clojure.java.io :as io]
             [clojure.string :as cs]
-            [czlab.basal
-             [util :as u]
-             [log :as l]
-             [proc :as p]
-             [meta :as m]
-             [util :as u]
-             [xpis :as po]
-             [core :as c :refer [n#]]])
+            [czlab.basal.util :as u]
+            [czlab.basal.log :as l]
+            [czlab.basal.proc :as p]
+            [czlab.basal.meta :as m]
+            [czlab.basal.util :as u]
+            [czlab.basal.xpis :as po]
+            [czlab.basal.core :as c :refer [n#]])
 
   (:import [java.util.concurrent.atomic AtomicInteger]
            [java.util.concurrent TimeoutException]
@@ -31,13 +28,11 @@
 ;;(set! *warn-on-reflection* true)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defprotocol WorkFlow
-  ""
   (exec [_ job]
         "Apply this workflow to the job."))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defprotocol Job
-  ""
   (wkflow [_] "")
   (runner [_] ""))
 
@@ -54,32 +49,38 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro defwflow
+
   "Define a workflow." [name & tasks]
   `(def ~name (czlab.flux.core/workflow<> [ ~@tasks ])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- csymb??
+
   "Cast to a Symbol?"
   [a] `(let [x# ~a] (if (c/sas? Symbol x#) x#)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- cstep??
+
   "Cast to a Step?"
   [a] `(let [x# ~a] (if (c/sas? Step x#) x#)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- is-null-join?
-  "" [s] `(= (po/typeid ~s) ::null-join))
+
+  [s] `(= (po/typeid ~s) ::null-join))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- err!
-  "" [c e] `(hash-map :step ~c :error ~e))
+
+  [c e] `(array-map :step ~c :error ~e))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (declare step-run-after step-run proto-step<>)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- rinit!
+
   "Reset a step." [step]
   (if step (step-init (po/parent step) step)))
 
@@ -124,9 +125,11 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn wrap-symb??
+
   "If x is a function, wrapped it
   inside a script symbol*."
   [x]
+
   (cond (c/sas? Symbol x) x
         (fn? x) (script<> x)
         :else (u/throw-BadArg "bad param type: "
@@ -134,22 +137,28 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- wrapc
+
   "Create a step from this Symbol"
   [x nxt]
+
   (-> x wrap-symb?? (step-reify nxt)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- fanout
+
   "Fork off tasks."
   [job nx defs]
+
   (let [cpu (runner job)]
     (l/debug "fanout: forking [%d] sub-tasks." (c/n# defs))
     (doseq [t defs] (p/run cpu (wrapc t nx)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- sa!
+
   "Set alarm."
   [step job wsecs]
+
   (when (c/spos? wsecs)
     (p/alarm (runner job) (* 1000 wsecs) step job)))
 
@@ -199,18 +208,23 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- terminal<>
+
   "*terminal*" [] (c/object<> Terminal :typeid ::terminal))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- terminal-step<>
-  "" [job]
+
+  [job]
   {:pre [(some? job)]}
+
   (let [t (terminal<>)]
     (step-init t (proto-step<> t nil {:job job}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- step-run-after
-  "" [orig arg]
+
+  [orig arg]
+
   (let [par' (po/parent orig)
         job (g-job orig)
         cpu (runner job)
@@ -229,7 +243,9 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- step-run
-  "" [step action]
+
+  [step action]
+
   (let [job (g-job step)
         ws (wkflow job)]
     (step-run-after
@@ -244,9 +260,12 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- join-timer
+
   [step job]
+
   (l/warn "%s: timer expired." (po/name (po/parent step)))
-  (let [_ (->> (u/mono-flop<> true) (po/set-conf step :error))
+  (let [_ (->> (u/mono-flop<> true)
+               (po/set-conf step :error))
         e (csymb?? (po/get-conf step :expiry))
         ws (wkflow job)
         n (when (and (nil? e)
@@ -321,8 +340,8 @@
 (defmacro choice<>
 
   "Create a *choice symbol*."
-
   [cexpr & choices]
+
   (let [[a b] (take-last 2 choices)
         [dft args]
         (if (and b (= a :default))
@@ -395,8 +414,8 @@
 (defmacro while<>
 
   "Create a *while-loop symbol*."
-
   [bexpr body]
+
   `(czlab.basal.core/object<> WhileLoop
                               :bexpr ~bexpr
                               :body ~body :typeid :czlab.flux.core/while))
@@ -451,7 +470,6 @@
 (defn- nulljoin
 
   "Create a do-nothing *join task*."
-
   [branches]
 
   (c/object<> SplitJoin :typeid ::null-join :forks branches))
@@ -460,7 +478,6 @@
 (defn- andjoin
 
   "Create a *join(and) task*."
-
   [branches waitSecs expiry]
 
   (c/object<> SplitJoin
@@ -481,7 +498,6 @@
 (defn- orjoin
 
   "Create a *or join symbol*."
-
   [branches waitSecs expiry]
 
   (c/object<> SplitJoin
@@ -528,11 +544,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro split-join<>
 
-  ""
   [bindings & forks]
 
   (let [{:keys [type wait-secs] :as M}
-        (apply hash-map bindings)
+        (apply array-map bindings)
         [a b] (take-last 2 forks)
         [exp args]
         (if (= a :expiry)
@@ -550,7 +565,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro split<>
 
-  ""
   [f1 & more]
 
   (let [forks (cons f1 more)]
@@ -584,13 +598,17 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro group<>
-  "" [a & more]
+
+  [a & more]
+
   `(czlab.basal.core/object<> czlab.flux.core.Group
                               :symbols [~a ~@more] :typeid :czlab.flux.core/group))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- range-expr
+
   [lower upper]
+
   (let [loopy (atom lower)]
     (c/fn_1 (let [job ____1 v @loopy]
               (if (< v upper)
@@ -630,16 +648,22 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro for<>
-  "" [lower upper body]
+
+  [lower upper body]
+
   `(czlab.basal.core/object<> czlab.flux.core.ForLoop
                               :lower ~lower :upper ~upper
                               :body ~body :typeid :czlab.flux.core/for))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn job<>
+
   "Create a job context."
+
   ([_sch initObj] (job<> _sch initObj nil))
+
   ([_sch] (job<> _sch nil nil))
+
   ([_sch initObj originObj]
    (let [impl (atom {:last-result nil})
          data (atom (or initObj {}))
@@ -670,7 +694,9 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- wsexec
-  "Apply workflow to this job." [ws job]
+
+  "Apply workflow to this job."
+  [ws job]
 
   (po/set-conf job :wflow ws)
   (p/run (runner job)
@@ -692,7 +718,6 @@
 (defn workflow<>
 
   "Creare workflow from a list of symbols."
-
   [symbols]
   {:pre [(sequential? symbols)]}
 
@@ -713,7 +738,6 @@
 
   "Create a work flow with the follwing syntax:
   (workflow<> symbol [symbol...] [:catch func])"
-
   [symbol0 & args]
   {:pre [(some? symbol0)]}
 
@@ -721,5 +745,4 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;EOF
-
 

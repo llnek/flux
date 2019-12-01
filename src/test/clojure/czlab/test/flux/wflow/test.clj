@@ -9,18 +9,19 @@
 (ns czlab.test.flux.wflow.test
 
   (:require [clojure.test :as ct]
-            [czlab.flux
-             [core :as w :refer [defwflow wkflow runner]]]
-            [czlab.basal
-             [proc :as p]
-             [util :as u]
-             [log :as l]
-             [xpis :as po]
-             [core :as c :refer [ensure?? ensure-thrown??]]]))
+            [czlab.flux.core
+             :as w :refer [defwflow wkflow runner]]
+            [czlab.basal.proc :as p]
+            [czlab.basal.util :as u]
+            [czlab.basal.log :as l]
+            [czlab.basal.xpis :as po]
+            [czlab.basal.core
+             :as c :refer [ensure?? ensure-thrown??]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- mksvr
-  "" [] (doto (p/scheduler<> "test" {:threads 4}) po/activate))
+  []
+  (doto (p/scheduler<> "test" {:threads 4}) po/activate))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defwflow
@@ -133,54 +134,54 @@
                      (po/finz (runner job))
                      (po/getv job :z))))
 
-  (ensure?? "split;and" (= 10 (let [job (w/job<> (mksvr))]
-                                (w/exec testWFlowSplitAnd job)
-                                (u/pause 3500)
+  (ensure?? "split;and" (== 10 (let [job (w/job<> (mksvr))]
+                                 (w/exec testWFlowSplitAnd job)
+                                 (u/pause 3500)
+                                 (po/finz (runner job))
+                                 (po/getv job :z))))
+
+  (ensure?? "split;or" (== 10 (let [job (w/job<> (mksvr))]
+                                (w/exec testWFlowSplitOr job)
+                                (u/pause 2000)
                                 (po/finz (runner job))
-                                (po/getv job :z))))
+                                (po/getv job :a))))
 
-  (ensure?? "split;or" (= 10 (let [job (w/job<> (mksvr))]
-                               (w/exec testWFlowSplitOr job)
-                               (u/pause 2000)
-                               (po/finz (runner job))
-                               (po/getv job :a))))
+  (ensure?? "switch;default" (== 10 (let [job (w/job<> (mksvr))]
+                                      (w/exec testWFlowSwitchdefault job)
+                                      (u/pause 2500)
+                                      (po/finz (runner job))
+                                      (po/getv job :z))))
 
-  (ensure?? "switch;default" (= 10 (let [job (w/job<> (mksvr))]
-                                     (w/exec testWFlowSwitchdefault job)
-                                     (u/pause 2500)
-                                     (po/finz (runner job))
-                                     (po/getv job :z))))
+  (ensure?? "switch;found" (== 10 (let [job (w/job<> (mksvr))]
+                                    (w/exec testWFlowSwitchfound job)
+                                    (u/pause 2500)
+                                    (po/finz (runner job))
+                                    (po/getv job :z))))
 
-  (ensure?? "switch;found" (= 10 (let [job (w/job<> (mksvr))]
-                                   (w/exec testWFlowSwitchfound job)
-                                   (u/pause 2500)
-                                   (po/finz (runner job))
-                                   (po/getv job :z))))
+  (ensure?? "if;false" (== 10 (let [job (w/job<> (mksvr))]
+                                (w/exec testWFlowIffalse job)
+                                (u/pause 1500)
+                                (po/finz (runner job))
+                                (po/getv job :a))))
 
-  (ensure?? "if;false" (= 10 (let [job (w/job<> (mksvr))]
-                               (w/exec testWFlowIffalse job)
+  (ensure?? "if;true" (== 10 (let [job (w/job<> (mksvr))]
+                               (w/exec testWFlowIftrue job)
                                (u/pause 1500)
                                (po/finz (runner job))
                                (po/getv job :a))))
 
-  (ensure?? "if;true" (= 10 (let [job (w/job<> (mksvr))]
-                              (w/exec testWFlowIftrue job)
-                              (u/pause 1500)
-                              (po/finz (runner job))
-                              (po/getv job :a))))
+  (ensure?? "loop;while" (== 10 (let [job (w/job<> (mksvr) {:cnt 0})]
+                                  (w/exec _testWFlowWhile job)
+                                  (u/pause 2500)
+                                  (po/finz (runner job))
+                                  (po/getv job :cnt))))
 
-  (ensure?? "loop;while" (= 10 (let [job (w/job<> (mksvr) {:cnt 0})]
-                                 (w/exec _testWFlowWhile job)
-                                 (u/pause 2500)
-                                 (po/finz (runner job))
-                                 (po/getv job :cnt))))
-
-  (ensure?? "loop;for" (= 10 (let [job (w/job<> (mksvr))]
-                               (po/setv job :z 0)
-                               (w/exec _testWFlowFor job)
-                               (u/pause 2500)
-                               (po/finz (runner job))
-                               (po/getv job :z))))
+  (ensure?? "loop;for" (== 10 (let [job (w/job<> (mksvr))]
+                                (po/setv job :z 0)
+                                (w/exec _testWFlowFor job)
+                                (u/pause 2500)
+                                (po/finz (runner job))
+                                (po/getv job :z))))
 
   (ensure?? "delay" (let [now (u/system-time)
                           job (w/job<> (mksvr) {:time -1})]
@@ -190,7 +191,7 @@
                       (let [x (- (po/getv job :time) now)]
                         (and (> x 2000) (< x 3000)))))
 
-  (ensure?? "test-end" (= 1 1)))
+  (ensure?? "test-end" (== 1 1)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (ct/deftest
