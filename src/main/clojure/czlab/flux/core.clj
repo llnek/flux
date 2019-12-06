@@ -17,7 +17,6 @@
             [czlab.basal.proc :as p]
             [czlab.basal.meta :as m]
             [czlab.basal.util :as u]
-            [czlab.basal.xpis :as po]
             [czlab.basal.core :as c :refer [n#]])
 
   (:import [java.util.concurrent.atomic AtomicInteger]
@@ -68,7 +67,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- is-null-join?
 
-  [s] `(= (po/typeid ~s) ::null-join))
+  [s] `(= (c/typeid ~s) ::null-join))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- err!
@@ -82,7 +81,7 @@
 (defn- rinit!
 
   "Reset a step." [step]
-  (if step (step-init (po/parent step) step)))
+  (if step (step-init (c/parent step) step)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defrecord Script []
@@ -90,11 +89,11 @@
   (step-init [me step]
     (let [{:keys [work-func]} me
           [s _] (m/count-arity work-func)]
-      (po/init step {:work work-func :arity s})))
+      (c/init step {:work work-func :arity s})))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
                     (let [{:keys [next work arity]}
-                          (po/get-conf cur)
+                          (c/get-conf cur)
                           a (cond
                               (c/in? arity 2) (work cur job)
                               (c/in? arity 1) (work job)
@@ -104,10 +103,10 @@
                       (if-some [a' (csymb?? a)]
                         (step-reify a' next) next)))}
          (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (c/stror (:script me) (name (po/typeid me)))))
+  c/Idable
+  (id [me] (c/stror (:script me) (name (c/typeid me)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro script<>
@@ -177,21 +176,21 @@
           (or job (g-job next))))
       Runnable
       (run [_] (step-run _ (:action @impl)))
-      po/Configurable
+      c/Configurable
       (get-conf [_ k] (get @impl k))
       (get-conf [_] @impl)
       (set-conf [_ x] _)
       (set-conf [_ k v] (swap! impl assoc k v) _)
-      po/Idable
+      c/Idable
       (id [_] _id)
-      po/Hierarchical
+      c/Hierarchical
       (parent [_] proto)
-      po/Initable
+      c/Initable
       (init [me m]
         (c/if-fn? [f (:init-fn @impl)]
           (f me m)
           (swap! impl merge m)) me)
-      po/Interruptable
+      c/Interruptable
       (interrupt [me job]
         (c/if-fn? [f (:timer @impl)] (f me job))))))
 
@@ -201,10 +200,10 @@
   (step-init [_ s] s)
   (step-reify [me nx]
     (u/throw-UOE "Cannot reify a terminal."))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- terminal<>
@@ -225,21 +224,21 @@
 
   [orig arg]
 
-  (let [par' (po/parent orig)
+  (let [par' (c/parent orig)
         job (g-job orig)
         cpu (runner job)
         step (if (csymb?? arg)
                (wrapc arg (terminal-step<> job)) arg)]
     (when (cstep?? step)
-      (cond (= ::terminal (-> step po/parent po/typeid))
-            (l/debug "%s :-> terminal" (po/name par'))
-            (po/is-valid? cpu)
+      (cond (= ::terminal (-> step c/parent c/typeid))
+            (l/debug "%s :-> terminal" (c/id par'))
+            (c/is-valid? cpu)
             (do (l/debug "%s :-> %s"
-                         (po/name par') (po/name (po/parent step)))
+                         (c/id par') (c/id (c/parent step)))
                 (p/run cpu step))
             :else
             (l/debug "no-cpu, %s skipping %s"
-                     (po/name par') (po/name (po/parent step)))))))
+                     (c/id par') (c/id (c/parent step)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- step-run
@@ -252,26 +251,26 @@
       step
       (try (action step job)
            (catch Throwable e#
-             (if-not (c/sas? po/Catchable ws)
+             (if-not (c/sas? c/Catchable ws)
                (c/do#nil (l/exception e#))
                (u/try!!!
                  (l/exception e#)
-                 (po/catche ws (err! step e#)))))))))
+                 (c/catche ws (err! step e#)))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- join-timer
 
   [step job]
 
-  (l/warn "%s: timer expired." (po/name (po/parent step)))
+  (l/warn "%s: timer expired." (c/id (c/parent step)))
   (let [_ (->> (u/mono-flop<> true)
-               (po/set-conf step :error))
-        e (csymb?? (po/get-conf step :expiry))
+               (c/set-conf step :error))
+        e (csymb?? (c/get-conf step :expiry))
         ws (wkflow job)
         n (when (and (nil? e)
-                     (c/sas? po/Catchable ws))
+                     (c/sas? c/Catchable ws))
             (->> (TimeoutException.)
-                 (err! step) (po/catche ws)))]
+                 (err! step) (c/catche ws)))]
     (some->> (some-> (or e n)
                      (wrapc (terminal-step<> job)))
              (p/run (runner job)))))
@@ -280,21 +279,21 @@
 (defrecord Postpone []
   Symbol
   (step-init [me step]
-    (po/init step {:delay (:delay-secs me)}))
+    (c/init step {:delay (:delay-secs me)}))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
                     (c/do#nil
                       (let [cpu (runner job)
                             {:keys [next delay]}
-                            (po/get-conf cur)]
+                            (c/get-conf cur)]
                         (->> (c/num?? delay 0)
                              (* 1000) (p/postpone cpu next))
                         (rinit! cur))))}
          (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro postpone<>
@@ -312,8 +311,8 @@
   Symbol
   (step-init [_ step]
     (let [{:keys [choices cexpr default]} _
-          {:keys [next]} (po/get-conf step)]
-      (po/init step
+          {:keys [next]} (c/get-conf step)]
+      (c/init step
                {:dft (some-> default wrap-symb?? (wrapc next))
                 :cexpr cexpr
                 :choices (c/preduce<vec>
@@ -324,17 +323,17 @@
   (step-reify [me nx]
     (->> {:action (fn [cur job]
                     (let [{:keys [cexpr dft choices]}
-                          (po/get-conf cur)
+                          (c/get-conf cur)
                           m (cexpr job)]
                       (rinit! cur)
                       (or (if m
                             (some #(if (= m (c/_1 %1)) (c/_E %1))
                                   (partition 2 choices))) dft)))}
          (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro choice<>
@@ -356,23 +355,23 @@
 (defrecord Decision []
   Symbol
   (step-init [me step]
-    (po/init step
+    (c/init step
              (select-keys me
                           [:bexpr :then :else])))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
                     (let [{:keys [bexpr next
                                   then else]}
-                          (po/get-conf cur)]
+                          (c/get-conf cur)]
                       (rinit! cur)
                       (if (bexpr job)
                         (wrapc then next)
                         (wrapc else next))))}
          (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro decision<>
@@ -394,21 +393,21 @@
   (step-init [_ step]
     (let [{:keys [body bexpr]} _]
       (assert (fn? bexpr))
-      (po/init step
+      (c/init step
                {:bexpr bexpr
                 :body (wrapc body step)})))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
                     (let [{:keys [next bexpr body]}
-                          (po/get-conf cur)]
+                          (c/get-conf cur)]
                       (if-not (bexpr job)
                         (do (rinit! cur) next)
                         (c/do#nil (p/run (runner job) body)))))}
          (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro while<>
@@ -425,7 +424,7 @@
   Symbol
   (step-init [me step]
     (let [{:keys [impl wait-secs forks expiry]} me]
-      (po/init step
+      (c/init step
                (->> (if-not (is-null-join? me)
                       {:expiry expiry :impl impl
                        :error nil :wait wait-secs :counter (AtomicInteger. 0)})
@@ -447,24 +446,24 @@
         {:action (fn [cur job]
                    (fanout job
                            (terminal-step<> job)
-                           (po/get-conf cur :forks))
-                   (po/get-conf cur :next))}
+                           (c/get-conf cur :forks))
+                   (c/get-conf cur :next))}
         {:timer join-timer
          :action (fn [cur job]
                    (let [{:keys [error wait
-                                 impl forks]} (po/get-conf cur)]
+                                 impl forks]} (c/get-conf cur)]
                      (cond (some? error) (c/do#nil (l/debug "too late."))
                            (number? forks) (impl cur)
-                           (empty? forks) (po/get-conf cur :next)
+                           (empty? forks) (c/get-conf cur :next)
                            (not-empty forks)
                            (c/do#nil (fanout job cur forks)
-                                     (po/set-conf cur :forks (n# forks))
-                                     (po/set-conf cur :alarm (sa! cur job wait))))))})
+                                     (c/set-conf cur :forks (n# forks))
+                                     (c/set-conf cur :alarm (sa! cur job wait))))))})
          (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- nulljoin
@@ -486,13 +485,13 @@
               :expiry expiry
               :wait-secs waitSecs
               :impl #(let [{:keys [counter forks alarm next]}
-                           (po/get-conf %)
+                           (c/get-conf %)
                            n (-> ^AtomicInteger counter .incrementAndGet)]
                        (l/debug "andjoin: sub-task[%d] returned." n)
                        (when (== n forks)
                          (l/debug "andjoin: sub-tasks completed.")
                          (some-> ^TimerTask alarm .cancel)
-                         (po/set-conf % :alarm nil) (rinit! %) next))))
+                         (c/set-conf % :alarm nil) (rinit! %) next))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- orjoin
@@ -505,11 +504,11 @@
               :typeid ::or-join
               :forks branches
               :expiry expiry
-              :impl #(let [{:keys [counter next alarm]} (po/get-conf %)
+              :impl #(let [{:keys [counter next alarm]} (c/get-conf %)
                            n (-> ^AtomicInteger counter .incrementAndGet)]
                        (l/debug "orjoin: sub-task[%d] returned." n)
                        (some-> ^TimerTask alarm .cancel)
-                       (po/set-conf % :alarm nil)
+                       (c/set-conf % :alarm nil)
                        (when (== n 1) (rinit! %) next))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -518,7 +517,7 @@
   (step-init [_ step]
     (let [{:keys [expiry forks options]} _
           {:keys [type wait-secs]} options]
-      (po/init step
+      (c/init step
                {:expiry (some-> expiry wrap-symb??)
                 :wait (c/num?? wait-secs 0)
                 :join-style type
@@ -528,7 +527,7 @@
       {:action (fn [cur _]
                  (let [{:keys [join-style wait
                                expiry next forks]}
-                       (po/get-conf cur)]
+                       (c/get-conf cur)]
                    (wrapc (cond (= :and join-style)
                                 (andjoin forks wait expiry)
                                 (= :or join-style)
@@ -536,10 +535,10 @@
                                 :else
                                 (nulljoin forks)) next)))}
       (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro split-join<>
@@ -575,7 +574,7 @@
 (defrecord Group []
   Symbol
   (step-init [me step]
-    (po/init step
+    (c/init step
              {:alist (map #(wrap-symb?? %) (:symbols me))}))
   (step-reify [me nx]
     ;iterate through the group, treating it like a
@@ -586,15 +585,15 @@
     ;be performed after the item is done.
     (->>
       {:action (fn [cur job]
-                 (let [[a & more] (po/get-conf cur :alist)]
+                 (let [[a & more] (c/get-conf cur :alist)]
                    (if-some [s (some-> a (wrapc cur))]
-                     (do (po/set-conf cur :alist more) s)
-                     (do (rinit! cur) (po/get-conf cur :next)))))}
+                     (do (c/set-conf cur :alist more) s)
+                     (do (rinit! cur) (c/get-conf cur :next)))))}
       (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro group<>
@@ -613,7 +612,7 @@
     (c/fn_1 (let [job ____1 v @loopy]
               (if (< v upper)
                 (swap! loopy
-                       #(do (po/setv job
+                       #(do (c/setv job
                                      :$range-index v) (+ 1 %))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -630,21 +629,21 @@
                    (number? high)
                    (<= low high))
               "for<>: Bad lower/upper bound.")
-      (po/init step
+      (c/init step
                {:body (wrapc body step)
                 :bexpr (range-expr low high)})))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
                     (let [{:keys [next bexpr body]}
-                          (po/get-conf cur)]
+                          (c/get-conf cur)]
                       (if-not (bexpr job)
                         (do (rinit! cur) next)
                         (c/do#nil (p/run (runner job) body)))))}
          (proto-step<> me nx) (step-init me)))
-  po/Typeable
+  c/Typeable
   (typeid [_] (:typeid _))
-  po/Nameable
-  (name [me] (name (po/typeid me))))
+  c/Idable
+  (id [me] (name (c/typeid me))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro for<>
@@ -672,23 +671,23 @@
        Job
        (runner [_] _sch)
        (wkflow [_] (:wflow @impl))
-       po/Configurable
+       c/Configurable
        (set-conf [_ k v] _)
        (set-conf [me _] me)
        (get-conf [_] nil)
        (get-conf [_ k] (get @impl k))
-       po/Hierarchical
+       c/Hierarchical
        ;where this job came from?
        (parent [_] originObj)
-       po/Idable
+       c/Idable
        (id [_] _id)
        ;for app data
-       po/Settable
+       c/Settable
        (unsetv [_ k]
          (swap! data dissoc k))
        (setv [_ k v]
          (swap! data assoc k v))
-       po/Gettable
+       c/Gettable
        (getv [_ k] (get @data k))
        (has? [_ k] (contains? @data k))))))
 
@@ -698,13 +697,13 @@
   "Apply workflow to this job."
   [ws job]
 
-  (po/set-conf job :wflow ws)
+  (c/set-conf job :wflow ws)
   (p/run (runner job)
          (wrapc (:head ws) (terminal-step<> job))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defrecord WorkFlowExObj []
-  po/Catchable
+  c/Catchable
   (catche [me e] ((:efn me) e))
   WorkFlow
   (exec [me job] (wsexec me job)))
