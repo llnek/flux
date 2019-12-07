@@ -13,7 +13,6 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as cs]
             [czlab.basal.util :as u]
-            [czlab.basal.log :as l]
             [czlab.basal.proc :as p]
             [czlab.basal.meta :as m]
             [czlab.basal.util :as u]
@@ -149,7 +148,7 @@
   [job nx defs]
 
   (let [cpu (runner job)]
-    (l/debug "fanout: forking [%d] sub-tasks." (c/n# defs))
+    (c/debug "fanout: forking [%d] sub-tasks." (c/n# defs))
     (doseq [t defs] (p/run cpu (wrapc t nx)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -231,13 +230,13 @@
                (wrapc arg (terminal-step<> job)) arg)]
     (when (cstep?? step)
       (cond (= ::terminal (-> step c/parent c/typeid))
-            (l/debug "%s :-> terminal" (c/id par'))
+            (c/debug "%s :-> terminal" (c/id par'))
             (c/is-valid? cpu)
-            (do (l/debug "%s :-> %s"
+            (do (c/debug "%s :-> %s"
                          (c/id par') (c/id (c/parent step)))
                 (p/run cpu step))
             :else
-            (l/debug "no-cpu, %s skipping %s"
+            (c/debug "no-cpu, %s skipping %s"
                      (c/id par') (c/id (c/parent step)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -252,9 +251,9 @@
       (try (action step job)
            (catch Throwable e#
              (if-not (c/sas? c/Catchable ws)
-               (c/do#nil (l/exception e#))
+               (c/do#nil (c/exception e#))
                (u/try!!!
-                 (l/exception e#)
+                 (c/exception e#)
                  (c/catche ws (err! step e#)))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -262,7 +261,7 @@
 
   [step job]
 
-  (l/warn "%s: timer expired." (c/id (c/parent step)))
+  (c/warn "%s: timer expired." (c/id (c/parent step)))
   (let [_ (->> (u/mono-flop<> true)
                (c/set-conf step :error))
         e (csymb?? (c/get-conf step :expiry))
@@ -452,7 +451,7 @@
          :action (fn [cur job]
                    (let [{:keys [error wait
                                  impl forks]} (c/get-conf cur)]
-                     (cond (some? error) (c/do#nil (l/debug "too late."))
+                     (cond (some? error) (c/do#nil (c/debug "too late."))
                            (number? forks) (impl cur)
                            (empty? forks) (c/get-conf cur :next)
                            (not-empty forks)
@@ -487,9 +486,9 @@
               :impl #(let [{:keys [counter forks alarm next]}
                            (c/get-conf %)
                            n (-> ^AtomicInteger counter .incrementAndGet)]
-                       (l/debug "andjoin: sub-task[%d] returned." n)
+                       (c/debug "andjoin: sub-task[%d] returned." n)
                        (when (== n forks)
-                         (l/debug "andjoin: sub-tasks completed.")
+                         (c/debug "andjoin: sub-tasks completed.")
                          (some-> ^TimerTask alarm .cancel)
                          (c/set-conf % :alarm nil) (rinit! %) next))))
 
@@ -506,7 +505,7 @@
               :expiry expiry
               :impl #(let [{:keys [counter next alarm]} (c/get-conf %)
                            n (-> ^AtomicInteger counter .incrementAndGet)]
-                       (l/debug "orjoin: sub-task[%d] returned." n)
+                       (c/debug "orjoin: sub-task[%d] returned." n)
                        (some-> ^TimerTask alarm .cancel)
                        (c/set-conf % :alarm nil)
                        (when (== n 1) (rinit! %) next))))

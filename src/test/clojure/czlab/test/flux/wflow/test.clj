@@ -13,7 +13,6 @@
              :as w :refer [defwflow wkflow runner]]
             [czlab.basal.proc :as p]
             [czlab.basal.util :as u]
-            [czlab.basal.log :as l]
             [czlab.basal.core
              :as c :refer [ensure?? ensure-thrown??]]))
 
