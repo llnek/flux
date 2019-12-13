@@ -186,12 +186,12 @@
       (parent [_] proto)
       c/Initable
       (init [me m]
-        (c/if-fn? [f (:init-fn @impl)]
+        (c/if-fn [f (:init-fn @impl)]
           (f me m)
           (swap! impl merge m)) me)
       c/Interruptable
       (interrupt [me job]
-        (c/if-fn? [f (:timer @impl)] (f me job))))))
+        (c/if-fn [f (:timer @impl)] (f me job))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defrecord Terminal []
