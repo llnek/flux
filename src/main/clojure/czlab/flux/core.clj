@@ -1,4 +1,4 @@
-;; Copyright © 2013-2019, Kenneth Leung. All rights reserved.
+;; Copyright © 2013-2020, Kenneth Leung. All rights reserved.
 ;; The use and distribution terms for this software are covered by the
 ;; Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
 ;; which can be found in the file epl-v10.html at the root of this distribution.
@@ -31,8 +31,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defprotocol Job
-  (wkflow [_] "")
-  (runner [_] ""))
+  (wkflow [_] "Return the workflow object.")
+  (runner [_] "Return the executor."))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defprotocol Step
@@ -48,20 +48,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro defwflow
 
-  "Define a workflow." [name & tasks]
+  "Define a workflow."
+  {:arglists '([name & tasks])}
+  [name & tasks]
+
   `(def ~name (czlab.flux.core/workflow<> [ ~@tasks ])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- csymb??
 
   "Cast to a Symbol?"
-  [a] `(let [x# ~a] (if (c/sas? Symbol x#) x#)))
+  {:arglists '([a])}
+  [a]
+
+  `(let [x# ~a] (if (c/sas? Symbol x#) x#)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- cstep??
 
   "Cast to a Step?"
-  [a] `(let [x# ~a] (if (c/sas? Step x#) x#)))
+  {:arglists '([a])}
+  [a]
+
+  `(let [x# ~a] (if (c/sas? Step x#) x#)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (c/defmacro- is-null-join?
@@ -79,7 +88,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn- rinit!
 
-  "Reset a step." [step]
+  "Reset a step."
+  [step]
+
   (if step (step-init (c/parent step) step)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -111,6 +122,8 @@
 (defmacro script<>
 
   "Create a *scriptable symbol*."
+  {:arglists '([workFunc]
+               [workFunc script-name])}
 
   ([workFunc]
    `(script<> ~workFunc nil))
@@ -126,6 +139,7 @@
 
   "If x is a function, wrapped it
   inside a script symbol*."
+  {:arglists '([x])}
   [x]
 
   (cond (c/sas? Symbol x) x
@@ -298,8 +312,9 @@
 (defmacro postpone<>
 
   "Create a *delay symbol*."
-
+  {:arglists '([delay-secs])}
   [delay-secs]
+
   `(czlab.basal.core/object<> czlab.flux.core.Postpone
                               :delay-secs ~delay-secs
                               :typeid :czlab.flux.core/delay))
@@ -338,6 +353,7 @@
 (defmacro choice<>
 
   "Create a *choice symbol*."
+  {:arglists '([cexpr & choices])}
   [cexpr & choices]
 
   (let [[a b] (take-last 2 choices)
@@ -376,6 +392,8 @@
 (defmacro decision<>
 
   "Create a *decision symbol*."
+  {:arglists '([bexpr then]
+               [bexpr then else])}
 
   ([bexpr then]
    `(decision<> ~bexpr ~then nil))
@@ -412,6 +430,7 @@
 (defmacro while<>
 
   "Create a *while-loop symbol*."
+  {:arglists '([bexpr body])}
   [bexpr body]
 
   `(czlab.basal.core/object<> WhileLoop
@@ -542,6 +561,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro split-join<>
 
+  "Create a split-join."
+  {:arglists '([bindings & forks])}
   [bindings & forks]
 
   (let [{:keys [type wait-secs] :as M}
@@ -563,6 +584,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro split<>
 
+  "Create a split."
+  {:arglists '([f1 & more])}
   [f1 & more]
 
   (let [forks (cons f1 more)]
@@ -597,6 +620,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro group<>
 
+  "Create a group."
+  {:arglists '([a & more])}
   [a & more]
 
   `(czlab.basal.core/object<> czlab.flux.core.Group
@@ -647,6 +672,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defmacro for<>
 
+  "Create a for."
+  {:arglists '([lower upper body])}
   [lower upper body]
 
   `(czlab.basal.core/object<> czlab.flux.core.ForLoop
@@ -657,10 +684,15 @@
 (defn job<>
 
   "Create a job context."
+  {:arglists '([sch]
+               [sch initObj]
+               [sch initObj originObj])}
 
-  ([_sch initObj] (job<> _sch initObj nil))
+  ([_sch initObj]
+   (job<> _sch initObj nil))
 
-  ([_sch] (job<> _sch nil nil))
+  ([_sch]
+   (job<> _sch nil nil))
 
   ([_sch initObj originObj]
    (let [impl (atom {:last-result nil})
@@ -716,6 +748,7 @@
 (defn workflow<>
 
   "Creare workflow from a list of symbols."
+  {:arglists '([symbols])}
   [symbols]
   {:pre [(sequential? symbols)]}
 
@@ -736,6 +769,7 @@
 
   "Create a work flow with the follwing syntax:
   (workflow<> symbol [symbol...] [:catch func])"
+  {:arglists '([symbol0 & args])}
   [symbol0 & args]
   {:pre [(some? symbol0)]}
 

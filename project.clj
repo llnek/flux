@@ -10,8 +10,7 @@
   :dependencies [[io.czlab/basal "1.1.0"]]
 
   :plugins [[cider/cider-nrepl "0.22.4"]
-            [lein-codox "0.10.7"]
-            [lein-cprint "1.3.2"]]
+            [lein-codox "0.10.7"]]
 
   :profiles {:provided {:dependencies
                         [[org.clojure/clojure "1.10.1" :scope "provided"]]}
