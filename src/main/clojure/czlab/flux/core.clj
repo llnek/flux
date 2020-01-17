@@ -265,7 +265,7 @@
       (try (action step job)
            (catch Throwable e#
              (if-not (c/sas? c/Catchable ws)
-               (c/do#nil (c/exception e#))
+               (c/do->nil (c/exception e#))
                (u/try!!!
                  (c/exception e#)
                  (c/catche ws (err! step e#)))))))))
@@ -295,7 +295,7 @@
     (c/init step {:delay (:delay-secs me)}))
   (step-reify [me nx]
     (->> {:action (fn [cur job]
-                    (c/do#nil
+                    (c/do->nil
                       (let [cpu (runner job)
                             {:keys [next delay]}
                             (c/get-conf cur)]
@@ -419,7 +419,7 @@
                           (c/get-conf cur)]
                       (if-not (bexpr job)
                         (do (rinit! cur) next)
-                        (c/do#nil (p/run (runner job) body)))))}
+                        (c/do->nil (p/run (runner job) body)))))}
          (proto-step<> me nx) (step-init me)))
   c/Typeable
   (typeid [_] (:typeid _))
@@ -470,11 +470,11 @@
          :action (fn [cur job]
                    (let [{:keys [error wait
                                  impl forks]} (c/get-conf cur)]
-                     (cond (some? error) (c/do#nil (c/debug "too late."))
+                     (cond (some? error) (c/do->nil (c/debug "too late."))
                            (number? forks) (impl cur)
                            (empty? forks) (c/get-conf cur :next)
                            (not-empty forks)
-                           (c/do#nil (fanout job cur forks)
+                           (c/do->nil (fanout job cur forks)
                                      (c/set-conf cur :forks (n# forks))
                                      (c/set-conf cur :alarm (sa! cur job wait))))))})
          (proto-step<> me nx) (step-init me)))
@@ -662,7 +662,7 @@
                           (c/get-conf cur)]
                       (if-not (bexpr job)
                         (do (rinit! cur) next)
-                        (c/do#nil (p/run (runner job) body)))))}
+                        (c/do->nil (p/run (runner job) body)))))}
          (proto-step<> me nx) (step-init me)))
   c/Typeable
   (typeid [_] (:typeid _))
