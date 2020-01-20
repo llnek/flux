@@ -29,7 +29,7 @@ to run concurrently.
 
 Add the following dependency to your `project.clj` file:
 
-    [io.czlab/flux "2.0.0"]
+    [io.czlab/flux "2.0.1"]
 
 ## Documentation
 

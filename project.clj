@@ -1,5 +1,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defproject io.czlab/flux "2.0.0"
+(defproject io.czlab/flux "2.0.1"
 
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
@@ -7,7 +7,7 @@
   :description "A simple workflow engine"
   :url "https://github.com/llnek/flux"
 
-  :dependencies [[io.czlab/basal "2.0.0"]]
+  :dependencies [[io.czlab/basal "2.0.1"]]
 
   :plugins [[cider/cider-nrepl "0.22.4"]
             [lein-codox "0.10.7"]]
@@ -30,7 +30,8 @@
   :test-selectors {:core :test-core}
 
   :jvm-opts ["-Dlog4j.configurationFile=file:attic/log4j2.xml"]
-  :javac-options [;"-source" "8"
+  :javac-options ["-source" "11"
+                  "-target" "11"
                   "-Xlint:unchecked" "-Xlint:-options" "-Xlint:deprecation"])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
