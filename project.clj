@@ -1,5 +1,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(defproject io.czlab/flux "2.1.0"
+(defproject io.czlab/flux "2.2.0"
 
   :license {:url "https://www.apache.org/licenses/LICENSE-2.0.txt"
             :name "Apache License"}
@@ -7,14 +7,13 @@
   :description "A simple workflow engine"
   :url "https://github.com/llnek/flux"
 
-  :dependencies [[io.czlab/basal "2.1.0"]]
+  :dependencies [[io.czlab/basal "2.2.0"]]
 
-  :plugins [[cider/cider-nrepl "0.28.3"]
+  :plugins [[cider/cider-nrepl "0.50.2" :exclusions [nrepl]]
             [lein-codox "0.10.8"]
             [lein-cljsbuild "1.1.8"]]
 
-  :profiles {:provided {:dependencies
-                        [[org.clojure/clojure "1.11.1" :scope "provided"]]}
+  :profiles {:provided {:dependencies [[org.clojure/clojure "1.12.0"]]}
              :uberjar {:aot :all}}
 
   :global-vars {*warn-on-reflection* true}
@@ -32,7 +31,7 @@
 
   :jvm-opts ["-Dlog4j.configurationFile=file:attic/log4j2.xml"]
   :javac-options ["-source" "16"
-                  "-target" "16"
+                  "-target" "22"
                   "-Xlint:unchecked" "-Xlint:-options" "-Xlint:deprecation"])
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
